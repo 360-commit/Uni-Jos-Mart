@@ -1,0 +1,1 @@
+{"hosting":{"public":"public","ignore":["**/node_modules/**"],"headers":[{"source":"**/*.@(js|css)","headers":[{"key":"Cache-Control","value":"public,max-age=3600"}]}]},"firestore":{"rules":"firestore.rules","indexes":"firestore.indexes.json"}}

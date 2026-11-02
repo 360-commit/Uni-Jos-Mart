@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Uni-Jos Mart | University of Jos student marketplace</title>
+		<meta name="description" content="Buy and sell books, electronics, fashion, hostel items, and more with University of Jos students on Uni-Jos Mart.">
+		<meta property="og:title" content="Uni-Jos Mart | University of Jos student marketplace">
+		<meta property="og:description" content="Buy and sell books, electronics, fashion, hostel items, and more with University of Jos students on Uni-Jos Mart.">
+		<meta property="og:type" content="website">
+		<meta name="theme-color" content="#F07230">
+
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;600;700;800&display=swap" rel="stylesheet">
+		<link rel="manifest" href="manifest.json">
+		<link rel="stylesheet" href="css/style.css">
+	</head>
+	<body>
+		<header class="top">
+			<a class="logo" href="#/">
+				<span class="cube">
+					<img src="unijos-logo.jpg" alt="University of Jos logo">
+				</span>
+				Uni-Jos <b>Mart</b>
+			</a>
+			<nav id="dnav"></nav>
+			<button id="th" class="tg" aria-label="Switch light or dark mode">
+				<svg class="ic" viewBox="0 0 24 24">
+					<path d="M21 13A9 9 0 1111 3a7 7 0 0010 10z" />
+				</svg>
+			</button>
+		</header>
+
+		<main id="app"></main>
+
+		<footer class="foot">
+			<p>Uni-Jos Mart is built for University of Jos students. Never buy from someone you are unsure of, and ask for a receipt.</p>
+			<p>
+				<a href="#" id="hw">How it works</a>
+				<a href="terms.html#terms">Terms and Conditions</a>
+				<a href="terms.html#privacy">Privacy Policy</a>
+			</p>
+		</footer>
+
+		<nav class="tab" id="tab"></nav>
+		<div id="toast"></div>
+
+		<script type="module" src="js/intro.js"></script>
+		<script type="module" src="js/db.js"></script>
+		<script type="module" src="js/app.js"></script>
+		<script>
+			(() => {
+				const root = document.documentElement;
+				root.dataset.theme = localStorage.th || (
+					matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light'
+				);
+
+				document.getElementById('th').onclick = () => {
+					const nextTheme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+					root.dataset.theme = nextTheme;
+					localStorage.th = nextTheme;
+				};
+			})();
+
+			if ('serviceWorker' in navigator) {
+				navigator.serviceWorker.register('sw.js').catch(() => {});
+			}
+		</script>
+	</body>
+</html>
