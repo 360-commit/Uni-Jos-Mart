@@ -3,6 +3,7 @@ import { trackScreen } from "./analytics.js";
 const $ = (s) => document.querySelector(s);
 let tk = localStorage.tk || '';
 let me = null;
+let afterAuth = () => '#/';
 
 const P = {
   home: '<path d="M3 11l9-8 9 8v10H3z"/>',
@@ -171,8 +172,16 @@ async function home() {
     <div>
       <h1><span>Buy. Sell.</span>Uni-Jos Mart</h1>
       <p>The student marketplace for the University of Jos. List what you no longer need, find what you do, and meet on campus.</p>
+      <div class="acts"><a class="btn" href="#/sell">${ic('plus')} Sell an item</a></div>
     </div>
     <div class="stage"><div class="iso"><i></i><i></i><i></i></div></div>
+  </section>
+  <section class="panel">
+    <h2>How to <span>get started</span></h2>
+    <div class="how-grid">
+      <div><h3>Buy</h3><p>Browse or search listings, open an item, then choose <b>Chat with seller</b> to ask questions and agree on a campus meeting. Inspect the item before paying.</p></div>
+      <div><h3>Sell</h3><p>Choose <b>Sell an item</b>, upload up to four photos, fill in the item details and price, then publish your listing.</p></div>
+    </div>
   </section>
   <form class="search" id="sf">
     <input id="q" placeholder="Search books, phones, hostel items" value="${esc(qs)}">
@@ -250,9 +259,11 @@ async function item(id) {
           ? `<div class="acts">
               <a class="btn" href="https://wa.me/${wa(s.phone)}">${ic('phone')} WhatsApp seller</a>
               <a class="btn alt" href="tel:${esc(s.phone)}">Call</a>
-              <a class="btn alt" href="#/chat/${i.id}_${me ? me.id : 'x'}">Message</a>
+              <a class="btn alt" id="chat-seller" href="${me ? `#/chat/${i.id}_${me.id}` : '#/login'}">${ic('chat')} Chat with seller</a>
             </div>`
-          : ''}
+          : i.status === 'available'
+            ? `<div class="acts"><a class="btn alt" id="chat-seller" href="${me ? `#/chat/${i.id}_${me.id}` : '#/login'}">${ic('chat')} Chat with seller</a></div>`
+            : ''}
       <div class="acts">
         <button class="alt" id="sv">Save</button>
         <a class="btn alt" href="#/seller/${i.sellerId}">Seller reviews</a>
@@ -274,6 +285,12 @@ async function item(id) {
   });
 
   hook(i);
+  const chatSeller = $('#chat-seller');
+  if (chatSeller && !me) {
+    chatSeller.onclick = () => {
+      afterAuth = (user) => `#/chat/${i.id}_${user.id}`;
+    };
+  }
   const d = $('#del');
   if (d) {
     d.onclick = async () => {
@@ -359,7 +376,9 @@ function profile(signup) {
         tk = r.token;
         localStorage.tk = tk;
         me = r.user;
-        location.hash = '#/';
+        const destination = afterAuth(me);
+        afterAuth = () => '#/';
+        location.hash = destination;
         toast('👋 Welcome to Uni-Jos Mart! You can now buy and sell.', 'success');
       } else {
         me = await api('/me', { method: 'PUT', body: b });
@@ -379,6 +398,7 @@ function login() {
     <form id="lf">
       ${fld('email', 'Email', '', 'email')}
       ${fld('password', 'Password', '', 'password')}
+      <p class="mu">Log in to continue to your listing, chat, or other selected action.</p>
       <p class="err" id="er"></p>
       <button>Log in</button>
     </form>
@@ -395,7 +415,9 @@ function login() {
       tk = r.token;
       localStorage.tk = tk;
       me = r.user;
-      location.hash = '#/';
+      const destination = afterAuth(me);
+      afterAuth = () => '#/';
+      location.hash = destination;
       toast('✅ Logged in! Welcome back.', 'success');
       nav();
     } catch (x) {
@@ -407,6 +429,7 @@ function login() {
 
 function sell() {
   if (!me) {
+    afterAuth = () => '#/sell';
     location.hash = '#/login';
     return;
   }
@@ -417,8 +440,13 @@ function sell() {
     <form id="sf2">
       <div class="seller">
         <div class="photo" id="ph">${ic('cam')}</div>
-        <div><label>Item photos (up to 4)</label><input type="file" id="pi" accept="image/*" multiple></div>
+        <div>
+          <label for="pi">Item photos (up to 4, required)</label>
+          <input type="file" id="pi" accept="image/*" multiple>
+          <p class="mu" id="photo-help">Choose clear photos. Images are resized automatically.</p>
+        </div>
       </div>
+      <div class="acts" id="photo-preview"></div>
       ${fld('title', 'Item name')}
       <div class="row">${fld('price', 'Price in Naira', '', 'number')}${sel('category', 'Category', CATS)}</div>
       <div class="row">${sel('condition', 'Condition', ['New', 'Like new', 'Used', 'Fairly used'])}${sel('pickup', 'Meeting point on campus', MEET)}</div>
@@ -430,9 +458,24 @@ function sell() {
   </div>`;
 
   $('#pi').onchange = async (e) => {
-    im = await Promise.all([...e.target.files].slice(0, 4).map(shrink));
-    $('#ph').style.backgroundImage = `url(${im[0]})`;
-    $('#ph').innerHTML = '';
+    const files = [...e.target.files];
+    if (files.length > 4) {
+      e.target.value = '';
+      im = [];
+      $('#ph').style.backgroundImage = '';
+      $('#ph').innerHTML = ic('cam');
+      $('#photo-preview').innerHTML = '';
+      $('#photo-help').textContent = 'Choose no more than 4 photos.';
+      return;
+    }
+
+    im = await Promise.all(files.map(shrink));
+    $('#ph').style.backgroundImage = im.length ? `url(${im[0]})` : '';
+    $('#ph').innerHTML = im.length ? '' : ic('cam');
+    $('#photo-help').textContent = `${im.length} photo${im.length === 1 ? '' : 's'} selected.`;
+    $('#photo-preview').innerHTML = im.slice(1).map((photo, index) => (
+      `<div class="photo preview" style="width:64px;height:64px;background-image:url(${photo})" aria-label="Photo ${index + 2}"></div>`
+    )).join('');
   };
 
   $('#sf2').onsubmit = async (e) => {
@@ -476,7 +519,12 @@ async function chat(id) {
     unsub();
     unsub = 0;
   }
-  if (!me) return (location.hash = '#/login');
+  if (!me) {
+    const [itemId] = id.split('_');
+    afterAuth = (user) => `#/chat/${itemId}_${user.id}`;
+    location.hash = '#/login';
+    return;
+  }
 
   const c = await fb.chatOpen(...id.split('_'));
   $('#app').innerHTML = `<div class="panel">

@@ -9,7 +9,7 @@
   --orange:#F07230;
   --orange-dk:#D45E1A;
   --orange-lt:#FEF0E6;
-  --bg:#F8F8F8;           /* milk-white page bg */
+  --bg:#FFFFFF;
   --card:#FFFFFF;
   --ink:#1A1008;
   --ink2:#5A3E28;
@@ -167,6 +167,12 @@ main{max-width:1100px;margin:0 auto;padding:18px}
 .hero h1{font-size:clamp(28px,8vw,62px);line-height:.95;font-weight:800}
 .hero h1 span{font-weight:300;display:block}
 .hero p{max-width:46ch;opacity:.92;font-size:15px}
+.hero .acts{position:relative;z-index:1}
+
+.how-grid{display:grid;gap:12px}
+.how-grid>div{padding:14px;border:1px solid var(--border);border-radius:var(--r-sm)}
+.how-grid h3{margin:0 0 4px;font-size:18px}
+.how-grid p{color:var(--ink2);font-size:14px}
 
 /* 3-D isometric cube in hero */
 .stage{perspective:900px;height:160px;display:grid;place-items:center}
@@ -573,6 +579,7 @@ label{display:block;font-weight:500;font-size:14px;margin-bottom:4px;color:var(-
   #dnav{display:flex}
   .grid{grid-template-columns:repeat(4,1fr)}
   .hero{grid-template-columns:1.3fr 1fr;align-items:center;padding:52px 40px}
+  .how-grid{grid-template-columns:1fr 1fr}
   .stage{height:260px}
   .iso{width:200px;height:200px}
   .row{grid-template-columns:1fr 1fr}

@@ -10,6 +10,9 @@
 		<meta property="og:type" content="website">
 		<meta name="theme-color" content="#F07230">
 
+		<script>
+			document.documentElement.dataset.theme = localStorage.getItem('th') || 'light';
+		</script>
 		<link rel="icon" href="unijos-logo.jpg" type="image/jpeg">
 		<link rel="preconnect" href="https://fonts.googleapis.com">
 		<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;600;700;800&display=swap" rel="stylesheet">
@@ -25,8 +28,8 @@
 				Uni-Jos <b>Mart</b>
 			</a>
 			<nav id="dnav"></nav>
-			<button id="th" class="tg" aria-label="Switch light or dark mode">
-				<svg class="ic" viewBox="0 0 24 24">
+			<button id="th" class="tg" aria-label="Switch to dark mode" aria-pressed="false">
+				<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">
 					<path d="M21 13A9 9 0 1111 3a7 7 0 0010 10z" />
 				</svg>
 			</button>
@@ -52,12 +55,22 @@
 		<script>
 			(() => {
 				const root = document.documentElement;
-				root.dataset.theme = localStorage.th || 'light';
+				const button = document.getElementById('th');
+				const updateButton = () => {
+					const dark = root.dataset.theme === 'dark';
+					button.setAttribute('aria-label', dark ? 'Switch to daylight mode' : 'Switch to dark mode');
+					button.setAttribute('aria-pressed', String(dark));
+					button.innerHTML = dark
+						? '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>'
+						: '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 13A9 9 0 1111 3a7 7 0 0010 10z"/></svg>';
+				};
+				updateButton();
 
-				document.getElementById('th').onclick = () => {
+				button.onclick = () => {
 					const nextTheme = root.dataset.theme === 'dark' ? 'light' : 'dark';
 					root.dataset.theme = nextTheme;
 					localStorage.th = nextTheme;
+					updateButton();
 				};
 			})();
 
