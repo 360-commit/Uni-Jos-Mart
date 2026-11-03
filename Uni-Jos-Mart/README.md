@@ -2,7 +2,7 @@
 Static app: no server to run. Data in Firestore, login with Firebase Auth, photos on Cloudinary.
 
 ## Deploying to Vercel
-Set the project Root Directory to the repository root. `vercel.json` publishes `public/` as a static site, and the obsolete `legacy/` JSON-file server is excluded. Do not set `legacy/` as the Vercel project root; its local file storage is not suitable for Vercel's serverless filesystem.
+Set the project Root Directory to the repository root. The root `vercel.json` publishes `Uni-Jos-Mart/public/` as a static site. If you instead set the Vercel Root Directory to `Uni-Jos-Mart`, its `vercel.json` publishes `public/`. The obsolete `legacy/` JSON-file server is excluded. Do not set `legacy/` as the Vercel project root; its local file storage is not suitable for Vercel's serverless filesystem.
 
 ## Setup (no card needed)
 1. console.firebase.google.com: create project, stay on Spark. Add a Web app and copy its config into `public/js/firebase-config.js`. Enable Google Analytics for the project (or enable it under Project settings > Integrations), then copy the web app's `measurementId` (starts with `G-`) into the same config file. Analytics screen tracking remains disabled until this value is set.
