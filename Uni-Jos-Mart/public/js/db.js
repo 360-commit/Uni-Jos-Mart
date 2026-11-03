@@ -62,20 +62,35 @@ const pubOf = (user) => ({
 const MSG = {
   'auth/email-already-in-use': 'This email is already registered.',
   'auth/invalid-credential': 'Wrong email or password.',
+  'auth/invalid-email': 'Enter a valid email address.',
+  'auth/user-not-found': 'No account was found with that email. Check it or create an account.',
+  'auth/wrong-password': 'Wrong email or password.',
   'auth/weak-password': 'Password needs 6 or more characters.',
+  'auth/missing-password': 'Enter your password to continue.',
+  'auth/operation-not-allowed': 'Email sign-in is currently unavailable. Please contact support.',
+  'auth/configuration-not-found': 'Email sign-in is not enabled yet. Please contact support.',
+  'auth/invalid-login-credentials': 'Wrong email or password.',
   'auth/too-many-requests': 'Too many attempts. Wait a few minutes.',
+  'auth/network-request-failed': 'Connection problem. Check your internet and try again.',
+  'auth/timeout': 'The request took too long. Check your connection and try again.',
+  'auth/internal-error': 'We could not complete your request. Please try again.',
+  'auth/unauthorized-domain': 'This site is not authorized for sign-in. Please contact support.',
+  'auth/invalid-api-key': 'Sign-in is temporarily unavailable. Please contact support.',
   'resource-exhausted': 'Uni-Jos Mart is very busy right now. Please try again later.',
   'permission-denied': 'You are not allowed to do that.',
   unavailable: 'No connection. Check your network.',
   'failed-precondition': 'The database index is still building. Try again in a few minutes.',
 };
 
-const fail = (error) => new Error(
-  MSG[error.code]
-    || MSG[(error.code || '').replace('firestore/', '')]
-    || error.message
-    || 'Something went wrong.',
-);
+const fail = (error) => {
+  const code = error?.code || '';
+  const message = MSG[code]
+    || MSG[code.replace('firestore/', '')]
+    || (!code ? error?.message : '')
+    || 'Something went wrong. Please check your connection and try again.';
+
+  return new Error(message);
+};
 
 // upload to Cloudinary (free, no card); stored URL is already resized and compressed
 const up = async (data) => {

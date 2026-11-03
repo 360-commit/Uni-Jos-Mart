@@ -44,9 +44,37 @@ const toast = (m, type = '') => {
   const t = $('#toast');
   t.textContent = friendly(m);
   t.className = type;
+  t.setAttribute('role', type === 'error' ? 'alert' : 'status');
+  t.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
   t.style.display = 'block';
   clearTimeout(toast._t);
   toast._t = setTimeout(() => (t.style.display = 'none'), 3800);
+};
+
+function setFormLoading(form, loading, message) {
+  const button = form.querySelector('button[type="submit"], button:not([type])');
+  if (!button) return;
+
+  if (loading) {
+    button.dataset.label = button.textContent.trim();
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.innerHTML = `<span class="spinner" aria-hidden="true"></span><span>${message}</span>`;
+    form.setAttribute('aria-busy', 'true');
+  } else {
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+    button.textContent = button.dataset.label || button.textContent;
+    delete button.dataset.label;
+    form.removeAttribute('aria-busy');
+  }
+}
+
+const authError = (error) => {
+  const message = friendly(error?.message);
+  return message === 'Something went wrong. Please try again.'
+    ? 'We could not complete that request. Check your connection and try again.'
+    : message;
 };
 
 const CATS = [
@@ -369,6 +397,9 @@ function profile(signup) {
     const b = Object.fromEntries(new FormData(e.target));
     b.photo = ph;
     b.terms = !!b.terms;
+    const form = e.currentTarget;
+    $('#er').textContent = '';
+    setFormLoading(form, true, signup ? 'Creating your account…' : 'Saving your profile…');
 
     try {
       if (signup) {
@@ -386,7 +417,11 @@ function profile(signup) {
       }
       nav();
     } catch (x) {
-      $('#er').textContent = friendly(x.message);
+      const message = authError(x);
+      $('#er').textContent = message;
+      toast(message, 'error');
+    } finally {
+      setFormLoading(form, false);
     }
   };
   wirePasswordToggle();
@@ -407,6 +442,9 @@ function login() {
 
   $('#lf').onsubmit = async (e) => {
     e.preventDefault();
+    const form = e.currentTarget;
+    $('#er').textContent = '';
+    setFormLoading(form, true, 'Signing you in…');
     try {
       const r = await api('/login', {
         method: 'POST',
@@ -421,7 +459,11 @@ function login() {
       toast('✅ Logged in! Welcome back.', 'success');
       nav();
     } catch (x) {
-      $('#er').textContent = friendly(x.message);
+      const message = authError(x);
+      $('#er').textContent = message;
+      toast(message, 'error');
+    } finally {
+      setFormLoading(form, false);
     }
   };
   wirePasswordToggle();

@@ -258,6 +258,15 @@ button,.btn{
 }
 button:hover,.btn:hover{background:var(--orange);color:#fff;box-shadow:0 6px 18px rgba(240,114,48,.35)}
 button:active,.btn:active{transform:scale(.97);box-shadow:0 2px 8px rgba(240,114,48,.18)}
+button:disabled{opacity:.78;cursor:wait;transform:none}
+.spinner{
+  width:18px;height:18px;flex:none;
+  border:2px solid rgba(255,255,255,.45);
+  border-top-color:#fff;border-radius:50%;
+  animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.spinner{animation-duration:1.6s}}
 
 button.alt,.btn.alt{
   background:var(--card);
