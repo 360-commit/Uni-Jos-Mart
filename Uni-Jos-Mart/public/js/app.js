@@ -522,7 +522,10 @@ function sell() {
 
   $('#sf2').onsubmit = async (e) => {
     e.preventDefault();
-    const b = Object.fromEntries(new FormData(e.target));
+    const form = e.currentTarget;
+    if (form.dataset.submitting === 'true') return;
+
+    const b = Object.fromEntries(new FormData(form));
     b.images = im;
     b.proof = !!b.proof;
 
@@ -531,12 +534,20 @@ function sell() {
       return;
     }
 
+    form.dataset.submitting = 'true';
+    $('#er').textContent = '';
+    setFormLoading(form, true, 'Publishing your listing…');
     try {
-      const i = await api('/items', { method: 'POST', body: b });
-      toast('🎉 Your listing is now live! Students can see it right away.', 'success');
-      location.hash = '#/item/' + i.id;
+      await api('/items', { method: 'POST', body: b });
+      toast('🎉 Your listing was published successfully and is now in the feed.', 'success');
+      location.hash = '#/';
     } catch (x) {
-      $('#er').textContent = friendly(x.message);
+      const message = friendly(x.message);
+      $('#er').textContent = message;
+      toast(message, 'error');
+    } finally {
+      delete form.dataset.submitting;
+      setFormLoading(form, false);
     }
   };
 }
