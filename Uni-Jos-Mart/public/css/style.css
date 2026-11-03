@@ -388,7 +388,11 @@ label{display:block;font-weight:500;font-size:14px;margin-bottom:4px;color:var(-
 }
 .err{color:var(--red);font-weight:500;font-size:14px}
 .chk{display:flex;gap:10px;align-items:flex-start}
-.chk input{width:20px;height:20px;margin-top:3px;accent-color:var(--orange);flex:none;width:20px !important}
+.chk input{appearance:auto;-webkit-appearance:checkbox;width:20px;height:20px;margin-top:3px;accent-color:var(--orange);flex:none;width:20px !important}
+
+.password-input{display:flex}
+.password-input input{min-width:0;border-radius:var(--r-sm) 0 0 var(--r-sm)}
+.password-toggle{border-radius:0 var(--r-sm) var(--r-sm) 0;padding:0 16px;box-shadow:none}
 
 /* ─── Item detail page ───────────────────────────────────────────── */
 .detail{display:grid;gap:18px}

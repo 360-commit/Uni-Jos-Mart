@@ -10,6 +10,7 @@
 		<meta property="og:type" content="website">
 		<meta name="theme-color" content="#F07230">
 
+		<link rel="icon" href="unijos-logo.jpg" type="image/jpeg">
 		<link rel="preconnect" href="https://fonts.googleapis.com">
 		<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;600;700;800&display=swap" rel="stylesheet">
 		<link rel="manifest" href="manifest.json">
@@ -51,9 +52,7 @@
 		<script>
 			(() => {
 				const root = document.documentElement;
-				root.dataset.theme = localStorage.th || (
-					matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light'
-				);
+				root.dataset.theme = localStorage.th || 'light';
 
 				document.getElementById('th').onclick = () => {
 					const nextTheme = root.dataset.theme === 'dark' ? 'light' : 'dark';

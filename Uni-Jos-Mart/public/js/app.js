@@ -195,8 +195,10 @@ async function home() {
     };
   });
 
+  const grid = $('#g');
   const L = await api(`/items?cat=${encodeURIComponent(cat)}&q=${encodeURIComponent(qs)}`);
-  $('#g').innerHTML = L.length
+  if (!grid.isConnected) return;
+  grid.innerHTML = L.length
     ? L.map(card).join('')
     : '<div class="panel"><h2>Nothing here yet</h2><p>Be the first to list an item in this category.</p></div>';
   tilt();
@@ -284,8 +286,23 @@ async function item(id) {
 }
 
 const fld = (n, l, v = '', t = 'text', r = 1) => (
-  `<div><label>${l}</label><input name="${n}" type="${t}" value="${esc(v)}" ${r ? 'required' : ''}></div>`
+  t === 'password'
+    ? `<div class="password-field"><label for="${n}">${l}</label><div class="password-input"><input id="${n}" name="${n}" type="password" value="${esc(v)}" ${r ? 'required' : ''}><button class="password-toggle" type="button" aria-label="Show password" aria-pressed="false">Show</button></div></div>`
+    : `<div><label>${l}</label><input name="${n}" type="${t}" value="${esc(v)}" ${r ? 'required' : ''}></div>`
 );
+
+function wirePasswordToggle() {
+  document.querySelectorAll('.password-toggle').forEach((button) => {
+    button.onclick = () => {
+      const input = button.parentElement.querySelector('input');
+      const visible = input.type === 'password';
+      input.type = visible ? 'text' : 'password';
+      button.textContent = visible ? 'Hide' : 'Show';
+      button.setAttribute('aria-label', `${visible ? 'Hide' : 'Show'} password`);
+      button.setAttribute('aria-pressed', String(visible));
+    };
+  });
+}
 const sel = (n, l, a, v = '') => (
   `<div><label>${l}</label><select name="${n}" required><option value="">Select</option>${a.map((x) => `<option ${x === v ? 'selected' : ''}>${x}</option>`).join('')}</select></div>`
 );
@@ -353,6 +370,7 @@ function profile(signup) {
       $('#er').textContent = friendly(x.message);
     }
   };
+  wirePasswordToggle();
 }
 
 function login() {
@@ -384,6 +402,7 @@ function login() {
       $('#er').textContent = friendly(x.message);
     }
   };
+  wirePasswordToggle();
 }
 
 function sell() {
