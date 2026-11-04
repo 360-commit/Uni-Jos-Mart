@@ -1103,10 +1103,19 @@ addEventListener('hashchange', route);
       }
     }
     route();
-  } catch {
-    renderLoadingState('Starting the app… please wait a moment.');
-    setTimeout(() => {
-      window.location.reload();
-    }, 1500);
+  } catch (error) {
+    console.error('App startup failed.', error);
+    $('#app').innerHTML = `
+      <div class="panel">
+        <h2>App could not start</h2>
+        <p>${esc(error?.message || 'Check your connection and try again.')}</p>
+        <button class="btn" data-retry-app>Try again</button>
+      </div>
+    `;
+
+    const retryButton = document.querySelector('[data-retry-app]');
+    if (retryButton) {
+      retryButton.onclick = () => location.reload();
+    }
   }
 })();

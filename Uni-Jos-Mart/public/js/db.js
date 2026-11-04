@@ -12,7 +12,7 @@ import {
   doc,
   getDoc,
   getDocs,
-  initializeFirestore,
+  getFirestore,
   limit,
   onSnapshot,
   orderBy,
@@ -27,7 +27,7 @@ import { CLOUD, firebaseConfig } from "./firebase-config.js";
 const hasFirebaseConfig = !!firebaseConfig && !!firebaseConfig.apiKey && !!firebaseConfig.projectId && !!firebaseConfig.appId;
 const app = hasFirebaseConfig ? initializeApp(firebaseConfig) : null;
 const auth = app ? getAuth(app) : null;
-const db = app ? initializeFirestore(app) : null;
+const db = app ? getFirestore(app) : null;
 
 const ensureFirebaseRuntime = () => {
   if (!app || !auth || !db) {

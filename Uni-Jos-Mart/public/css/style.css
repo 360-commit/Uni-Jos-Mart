@@ -232,6 +232,7 @@ input,select,textarea{
   border-radius:var(--r-sm);
   transition:border-color .18s,box-shadow .18s;
   -webkit-appearance:none;
+  appearance:none;
 }
 input:focus,select:focus,textarea:focus{
   outline:none;
@@ -346,7 +347,7 @@ button.danger:hover{background:#b52b20}
   font-size:14px;font-weight:500;letter-spacing:0;
   color:var(--ink);margin-bottom:4px;
   overflow:hidden;display:-webkit-box;
-  -webkit-line-clamp:2;-webkit-box-orient:vertical;
+  -webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;
 }
 .price{font-size:18px;font-weight:700;color:var(--orange)}
 .mu{color:var(--muted);font-size:12px;margin-top:2px}
