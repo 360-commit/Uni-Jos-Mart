@@ -7,6 +7,8 @@ let profileReady = false;
 let profileLoadFailed = false;
 let afterAuth = () => '#/';
 let recentListing = null;
+let feedCache = { items: [], fromCache: false, loadedAt: 0 };
+let feedRequest = null;
 
 const P = {
   home: '<path d="M3 11l9-8 9 8v10H3z"/>',
@@ -251,27 +253,70 @@ async function home() {
 
   const grid = $('#g');
   const showRecent = recentListing && !cat && !qs;
-  grid.innerHTML = showRecent
-    ? `${card(recentListing)}<div class="feed-loading" role="status"><span class="spinner" aria-hidden="true"></span> Refreshing the feed…</div>`
-    : '<div class="feed-loading" role="status"><span class="spinner" aria-hidden="true"></span> Loading listings…</div>';
-  let L;
-  try {
-    L = await api(`/items?cat=${encodeURIComponent(cat)}&q=${encodeURIComponent(qs)}`);
-  } catch (error) {
-    if (!showRecent || !grid.isConnected) throw error;
-    grid.innerHTML = `${card(recentListing)}<div class="panel"><p>Your listing is published. The rest of the feed could not be refreshed.</p><button id="rf">Try again</button></div>`;
-    $('#rf').onclick = home;
+  const feedKey = `cat=${encodeURIComponent(cat)}&q=${encodeURIComponent(qs)}`;
+  const cached = (!cat && !qs && feedCache.items.length) ? feedCache.items : null;
+
+  if (cached) {
+    const items = showRecent
+      ? [recentListing, ...cached.filter((item) => item.id !== recentListing.id)]
+      : cached;
+    grid.innerHTML = items.map(card).join('');
+    if (showRecent && !recentListing) recentListing = null;
     tilt();
-    return;
+  } else {
+    grid.innerHTML = showRecent
+      ? `${card(recentListing)}<div class="feed-loading" role="status"><span class="spinner" aria-hidden="true"></span> Refreshing the feed…</div>`
+      : '<div class="feed-loading" role="status"><span class="spinner" aria-hidden="true"></span> Loading listings…</div>';
   }
-  if (!grid.isConnected) return;
-  const items = showRecent
-    ? [recentListing, ...L.filter((item) => item.id !== recentListing.id)]
-    : L;
-  if (showRecent) recentListing = null;
-  grid.innerHTML = items.length
-    ? items.map(card).join('')
-    : '<div class="panel"><h2>Nothing here yet</h2><p>Be the first to list an item in this category.</p></div>';
+
+  const fetchFeed = async () => {
+    const key = feedKey;
+    if (feedRequest && feedRequest.key === key) return feedRequest.promise;
+
+    feedRequest = {
+      key,
+      promise: api(`/items?${feedKey}`)
+        .then((L) => {
+          feedCache = { items: L, fromCache: !!L.fromCache, loadedAt: Date.now() };
+          return L;
+        })
+        .finally(() => {
+          if (feedRequest && feedRequest.key === key) feedRequest = null;
+        }),
+    };
+
+    return feedRequest.promise;
+  };
+
+  try {
+    const L = await fetchFeed();
+    if (!grid.isConnected) return;
+    const items = showRecent
+      ? [recentListing, ...L.filter((item) => item.id !== recentListing.id)]
+      : L;
+    if (showRecent && !L.fromCache) recentListing = null;
+    grid.innerHTML = items.length
+      ? items.map(card).join('')
+      : L.fromCache
+        ? '<div class="panel"><p>No saved listings are available. Connect to the internet to load the marketplace.</p></div>'
+        : '<div class="panel"><h2>Nothing here yet</h2><p>Be the first to list an item in this category.</p></div>';
+    if (L.fromCache) {
+      grid.insertAdjacentHTML('beforeend', `<div class="panel">
+        <p>Showing saved listings. This offline list may not include listings from other students.</p>
+        <button id="rf">Try loading all listings</button>
+      </div>`);
+      $('#rf').onclick = home;
+    }
+  } catch (error) {
+    if (!grid.isConnected) return;
+    grid.innerHTML = `${showRecent ? card(recentListing) : ''}<div class="panel">
+      <p>${showRecent
+        ? 'Your listing is published, but we could not load the rest of the student marketplace.'
+        : 'We could not load listings from the student marketplace.'} ${esc(error.message)}</p>
+      <button id="rf">Try again</button>
+    </div>`;
+    $('#rf').onclick = home;
+  }
   tilt();
 }
 
@@ -281,7 +326,7 @@ async function mine() {
   const L = await api('/items?mine=1');
   $('#app').innerHTML = `<div class="panel">
     <h2>My <span>listings</span></h2>
-    <p>Mark items as reserved or sold from the item page.</p>
+    <p>Only listings you created appear here. <a href="#/">Browse all student listings</a>. Mark your items as reserved or sold from the item page.</p>
   </div>
   <div class="grid">${L.map(card).join('') || '<div class="panel">You have not listed anything. Tap Sell to start.</div>'}</div>`;
   tilt();
@@ -457,6 +502,7 @@ function profile(signup) {
         localStorage.tk = tk;
         me = r.user;
         profileReady = true;
+        profileLoadFailed = false;
         const destination = afterAuth(me);
         afterAuth = () => '#/';
         location.hash = destination;
@@ -464,6 +510,7 @@ function profile(signup) {
       } else {
         me = await api('/me', { method: 'PUT', body: b });
         profileReady = true;
+        profileLoadFailed = false;
         toast('✅ Profile saved successfully!', 'success');
       }
       nav();
@@ -504,11 +551,11 @@ function login() {
       tk = r.token;
       localStorage.tk = tk;
       me = r.user;
+      profileReady = true;
+      profileLoadFailed = false;
       const destination = afterAuth(me);
       afterAuth = () => '#/';
       location.hash = destination;
-      profileReady = false;
-      profileLoadFailed = false;
       toast('✅ Logged in! Welcome back.', 'success');
       nav();
       loadProfile(r.user.id);
@@ -654,14 +701,21 @@ let unsub;
 async function inbox() {
   if (!me) return (location.hash = '#/login');
 
-  const L = inboxL || await fb.inbox();
+  const L = inboxL || (inboxError ? [] : await fb.inbox());
   $('#app').innerHTML = `<div class="panel">
     <h2>Chats</h2>
+    ${inboxError ? `<p role="alert">Your chats could not be loaded. ${esc(inboxError)}</p><button id="retry-inbox">Try again</button>` : ''}
     ${L.map((c) => `<p>
       <a href="#/chat/${c.id}"><b>${esc(c.title)}</b></a>${isNew(c) ? ' <span class="vb">New</span>' : ''}<br>
       <span class="mu">${esc(c.lastMsg || 'No messages yet')}</span>
-    </p>`).join('') || '<p>No conversations yet. Open an item and tap Message.</p>'}
+    </p>`).join('') || (inboxError ? '' : '<p>No conversations yet. Open an item and tap Message.</p>')}
   </div>`;
+  const retry = $('#retry-inbox');
+  if (retry) retry.onclick = () => {
+    inboxError = '';
+    stopBadge = 0;
+    route();
+  };
 }
 
 async function chat(id) {
@@ -680,6 +734,8 @@ async function chat(id) {
   $('#app').innerHTML = `<div class="panel">
     <h2>${esc(c.title)}</h2>
     <div class="warn">Meet on campus and ask for a receipt before paying.</div>
+    <p id="chat-status" class="mu" role="status">Connecting to this chat…</p>
+    <button id="chat-retry" type="button" hidden>Reconnect</button>
     <div id="ms" style="height:50vh;overflow:auto;margin:14px 0"></div>
     <div id="ex"></div>
     <p><button class="alt" id="rc">Report this chat</button></p>
@@ -746,26 +802,86 @@ async function chat(id) {
     }
   };
 
-  unsub = fb.watch(id, (L) => {
-    $('#ms').innerHTML = L.map((m) => `<p style="text-align:${m.from === me.id ? 'right' : 'left'}">
+  let currentMessages = [];
+  const pendingMessages = new Map();
+  const renderMessages = (list = []) => {
+    const status = $('#chat-status');
+    const messages = $('#ms');
+    const retry = $('#chat-retry');
+    if (!status || !messages) return;
+    const pending = pendingMessages.get(id) || [];
+    const merged = [...pending, ...list]
+      .filter((message, index, all) => {
+        const key = message.localId || `${message.from}:${message.t}:${message.text}:${message.img || ''}`;
+        return index === all.findIndex((entry) => (
+          (entry.localId || `${entry.from}:${entry.t}:${entry.text}:${entry.img || ''}`) === key
+        ));
+      })
+      .sort((a, b) => (a.t || 0) - (b.t || 0));
+
+    messages.innerHTML = merged.map((m) => `<p style="text-align:${m.from === me.id ? 'right' : 'left'}">
       <span style="display:inline-block;padding:8px 12px;background:${m.from === me.id ? 'var(--sun)' : '#e8ede9'}">
         ${esc(m.text)}${m.img ? `<img src="${m.img}" alt="Photo sent in chat" style="display:block;max-width:220px">` : ''}
       </span>
     </p>`).join('');
-    $('#ms').scrollTop = 1e9;
-    if (L.length && L[L.length - 1].from !== me.id) fb.seen(id);
-  });
+    messages.scrollTop = 1e9;
+    if (retry) retry.hidden = true;
+    status.textContent = '';
+    if (merged.length && merged[merged.length - 1].from !== me.id) fb.seen(id);
+  };
+
+  const showMessages = (L, error) => {
+    const status = $('#chat-status');
+    const retry = $('#chat-retry');
+    if (!status) return;
+    if (error) {
+      console.error('Could not load chat messages.', error);
+      status.textContent = `Messages could not be loaded. ${friendly(error.message)}`;
+      if (retry) retry.hidden = false;
+      return;
+    }
+    currentMessages = L;
+    renderMessages(L);
+  };
+
+  unsub = fb.watch(id, showMessages);
+  $('#chat-retry').onclick = () => {
+    if (unsub) unsub();
+    $('#chat-status').textContent = 'Reconnecting to this chat…';
+    unsub = fb.watch(id, showMessages);
+  };
 
   $('#mf').onsubmit = async (e) => {
     e.preventDefault();
     const t = e.target.t.value.trim();
-    e.target.t.value = '';
-    if (t) {
-      try {
-        await fb.send(id, t);
-      } catch (x) {
-        toast(x.message);
-      }
+    if (!t) return;
+    const form = e.currentTarget;
+    const optimistic = {
+      from: me.id,
+      text: t,
+      img: '',
+      t: Date.now(),
+      localId: `local-${Date.now()}`,
+    };
+
+    const existing = pendingMessages.get(id) || [];
+    pendingMessages.set(id, [...existing, optimistic]);
+    renderMessages(currentMessages);
+    setFormLoading(form, true, 'Sending…');
+
+    try {
+      await fb.send(id, t);
+      e.target.t.value = '';
+      const active = pendingMessages.get(id) || [];
+      pendingMessages.set(id, active.filter((message) => message.localId !== optimistic.localId));
+      renderMessages(currentMessages);
+    } catch (x) {
+      const active = pendingMessages.get(id) || [];
+      pendingMessages.set(id, active.filter((message) => message.localId !== optimistic.localId));
+      renderMessages(currentMessages);
+      toast(x.message, 'error');
+    } finally {
+      setFormLoading(form, false);
     }
   };
 }
@@ -774,6 +890,7 @@ const VB = '<span class="vb">' + ic('shield') + ' Verified student</span>';
 let adm;
 let unread = 0;
 let inboxL = 0;
+let inboxError = '';
 let stopBadge = 0;
 
 const isNew = (c) => c.lastFrom && me && c.lastFrom !== me.id
@@ -905,11 +1022,20 @@ async function route() {
     unsub = 0;
   }
   if (me && !stopBadge) {
-    stopBadge = fb.watchInbox((L) => {
+    stopBadge = fb.watchInbox((L, error) => {
+      if (error) {
+        console.error('Could not load the chat list.', error);
+        inboxError = error.message;
+        stopBadge = 0;
+        if (location.hash === '#/inbox') inbox();
+        return;
+      }
+      inboxError = '';
       inboxL = L;
       unread = L.filter(isNew).length;
       document.title = (unread ? '(' + unread + ') ' : '') + 'Uni-Jos Mart';
       nav();
+      if (location.hash === '#/inbox') inbox();
     });
   }
 

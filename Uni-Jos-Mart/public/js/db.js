@@ -51,12 +51,15 @@ const REQ = [
 
 const pubOf = (user) => ({
   id: user.id,
-  name: user.firstName + ' ' + user.surname,
+  name: [user.firstName, user.middleName, user.surname].filter(Boolean).join(' ').trim() || 'Student',
   photo: user.photo || '',
-  faculty: user.faculty,
-  department: user.department,
-  schoolAddress: user.schoolAddress,
-  phone: user.phone,
+  faculty: user.faculty || '',
+  department: user.department || '',
+  schoolAddress: user.schoolAddress || '',
+  phone: user.phone || '',
+  email: user.email || '',
+  matric: user.matric || '',
+  campus: user.campus || 'University of Jos',
 });
 
 const MSG = {
@@ -265,6 +268,7 @@ async function route(path, options) {
     const cached = cache.get(cacheKey);
 
     if (cached && Date.now() - cached.t < TTL) {
+      cached.v.fromCache = cached.fromCache;
       return cached.v;
     }
 
@@ -301,7 +305,12 @@ async function route(path, options) {
       ));
     }
 
-    cache.set(cacheKey, { t: Date.now(), v: items });
+    items.fromCache = snapshot.metadata.fromCache;
+    cache.set(cacheKey, {
+      t: Date.now(),
+      v: items,
+      fromCache: snapshot.metadata.fromCache,
+    });
     return items;
   }
 
@@ -409,6 +418,7 @@ window.fb = {
 
     const item = itemSnapshot.data();
     const chatId = itemId + '_' + buyer;
+    const chatRef = doc(db, 'chats', chatId);
 
     if (userId === buyer) {
       if (buyer === item.sellerId) {
@@ -416,13 +426,26 @@ window.fb = {
       }
 
       await setDoc(
-        doc(db, 'chats', chatId),
+        chatRef,
         { participants: [buyer, item.sellerId], itemId, title: item.title },
         { merge: true },
       );
     }
 
-    const chat = (await getDoc(doc(db, 'chats', chatId))).data() || {};
+    const chatSnapshot = await getDoc(chatRef);
+    if (!chatSnapshot.exists()) {
+      throw new Error('This conversation has not been started by the buyer yet.');
+    }
+
+    const chat = chatSnapshot.data();
+    if (
+      chat.itemId !== itemId
+      || !Array.isArray(chat.participants)
+      || !chat.participants.includes(userId)
+    ) {
+      throw new Error('You do not have access to this conversation.');
+    }
+
     const review = await getDoc(doc(db, 'reviews', chatId));
 
     return {
@@ -441,22 +464,23 @@ window.fb = {
       throw new Error('Slow down a little.');
     }
 
-    last = Date.now();
     const userId = await uid();
     const message = text.slice(0, 500);
     const uploadedImage = image ? await up(image) : '';
-
-    await addDoc(collection(db, 'chats', id, 'messages'), {
+    const batch = writeBatch(db);
+    batch.set(doc(collection(db, 'chats', id, 'messages')), {
       from: userId,
       text: message,
       img: uploadedImage,
       t: Date.now(),
     });
-    await updateDoc(doc(db, 'chats', id), {
+    batch.update(doc(db, 'chats', id), {
       lastMsg: (message || 'Photo').slice(0, 60),
       lastFrom: userId,
       updated: Date.now(),
     });
+    await batch.commit();
+    last = Date.now();
   },
 
   watch: (id, callback) => onSnapshot(
@@ -466,7 +490,7 @@ window.fb = {
       limit(60),
     ),
     (snapshot) => callback(snapshot.docs.map((document) => document.data()).reverse()),
-    () => callback([]),
+    (error) => callback([], fail(error)),
   ),
 
   async inbox() {
@@ -498,7 +522,7 @@ Object.assign(window.fb, {
         id: document.id,
         ...document.data(),
       }))),
-      () => {},
+      (error) => callback([], fail(error)),
     );
   },
 
