@@ -86,7 +86,7 @@
 				};
 			})();
 
-			if ('serviceWorker' in navigator) {
+			if ('serviceWorker' in navigator && false) {
 				navigator.serviceWorker.register('sw.js').catch(() => {});
 			}
 		</script>

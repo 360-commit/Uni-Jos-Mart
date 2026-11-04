@@ -16,8 +16,6 @@ import {
   limit,
   onSnapshot,
   orderBy,
-  persistentLocalCache,
-  persistentMultipleTabManager,
   query,
   setDoc,
   updateDoc,
@@ -28,12 +26,7 @@ import { CLOUD, firebaseConfig } from "./firebase-config.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-// offline cache = far fewer reads and works on weak networks
-const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager(),
-  }),
-});
+const db = initializeFirestore(app);
 
 const REQ = [
   'firstName',
@@ -130,7 +123,7 @@ const words = (value) => [
 ].slice(0, 30);
 
 const cache = new Map();
-const TTL = 45e3;
+const TTL = 0;
 let profileCache = null;
 
 const uid = async () => {
