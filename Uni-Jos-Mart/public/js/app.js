@@ -579,12 +579,22 @@ function loadProfile(id) {
     if (location.hash === '#/profile') profile(0);
   }).catch((error) => {
     if (me?.id !== id) return;
-    profileLoadFailed = true;
-    console.error('Could not load the signed-in user profile.', error);
+    me = {
+      ...me,
+      id,
+      email: me.email || '',
+      firstName: me.firstName || '',
+      surname: me.surname || '',
+    };
+    profileReady = true;
+    profileLoadFailed = false;
+    nav();
+    const offline = /No connection|network|offline|Failed to fetch|fetch failed/i.test(error?.message || '');
+    if (!offline) {
+      console.error('Could not load the signed-in user profile.', error);
+    }
     if (location.hash === '#/profile') {
       profile(0);
-    } else {
-      toast('You are signed in, but your profile is taking longer to load. Check your connection and try again.', 'error');
     }
   });
 }

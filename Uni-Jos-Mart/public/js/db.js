@@ -143,17 +143,43 @@ const uid = async () => {
   return auth.currentUser.uid;
 };
 
+const emptyProfile = (id, email = '') => ({
+  id,
+  email,
+  firstName: '',
+  middleName: '',
+  surname: '',
+  phone: '',
+  matric: '',
+  faculty: '',
+  department: '',
+  schoolAddress: '',
+  permAddress: '',
+  state: '',
+  lga: '',
+  photo: '',
+  campus: 'University of Jos',
+});
+
 const mine = async () => {
   const id = await uid();
   if (profileCache?.id === id) return profileCache;
 
-  const snapshot = await getDoc(doc(db, 'users', id));
-  if (!snapshot.exists()) {
-    throw new Error('Your account profile could not be found. Please contact support.');
-  }
+  try {
+    const snapshot = await getDoc(doc(db, 'users', id));
+    if (!snapshot.exists()) {
+      const fallback = { ...emptyProfile(id, auth.currentUser?.email || ''), id };
+      profileCache = fallback;
+      return fallback;
+    }
 
-  profileCache = snapshot.data();
-  return profileCache;
+    profileCache = snapshot.data();
+    return profileCache;
+  } catch (error) {
+    const fallback = { ...emptyProfile(id, auth.currentUser?.email || ''), id };
+    profileCache = fallback;
+    return fallback;
+  }
 };
 
 async function route(path, options) {
