@@ -19,6 +19,7 @@ Set the project Root Directory to the repository root. The root `vercel.json` pu
 - Photos are shrunk in the browser then optimized by Cloudinary; the database holds only a short link.
 - Offline cache is on, so repeat visits cost fewer reads on weak networks.
 - Quota or network errors show a friendly message instead of a blank page.
+- If signup loses its connection after creating the Firebase Auth account, retry with the same email and password to finish saving the profile; if setup already completed, log in instead.
 - Matric numbers are unique (enforced by the database), and security rules block editing other people's items, profiles and chats.
 
 ## Watch these

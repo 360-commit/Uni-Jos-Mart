@@ -198,12 +198,33 @@ async function route(path, options) {
       throw new Error('Fill every required field.');
     }
 
-    const credential = await createUserWithEmailAndPassword(
-      auth,
-      body.email.trim().toLowerCase(),
-      body.password,
-    );
+    const email = body.email.trim().toLowerCase();
+    let credential;
+    let createdAuthUser = true;
+    try {
+      credential = await createUserWithEmailAndPassword(auth, email, body.password);
+    } catch (error) {
+      if (error.code !== 'auth/email-already-in-use') throw error;
+      credential = await signInWithEmailAndPassword(auth, email, body.password);
+      createdAuthUser = false;
+    }
+
     const id = credential.user.uid;
+
+    if (!createdAuthUser) {
+      let existingProfile;
+      try {
+        existingProfile = await getDoc(doc(db, 'users', id));
+      } catch (error) {
+        await signOut(auth);
+        throw error;
+      }
+
+      if (existingProfile.exists()) {
+        await signOut(auth);
+        throw new Error('An account already exists for this email. Please log in instead.');
+      }
+    }
 
     try {
       const user = {
@@ -231,8 +252,6 @@ async function route(path, options) {
       profileCache = user;
       return { token: 'fb', user };
     } catch (error) {
-      await credential.user.delete().catch(() => {});
-
       throw error.code === 'permission-denied'
         ? new Error('This matriculation number is already registered.')
         : error;
