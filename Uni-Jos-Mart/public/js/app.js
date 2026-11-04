@@ -368,13 +368,23 @@ async function item(id) {
       ${mineIt
         ? `<div class="acts">${['available', 'reserved', 'sold'].map((x) => `<button class="alt" data-s="${x}">Mark ${x}</button>`).join('')}<button class="danger" id="del">Delete</button></div>`
         : i.status === 'available' && s.phone
-          ? `<div class="acts">
-              <a class="btn" href="https://wa.me/${wa(s.phone)}">${ic('phone')} WhatsApp seller</a>
-              <a class="btn alt" href="tel:${esc(s.phone)}">Call</a>
-              <a class="btn alt" id="chat-seller" href="${me ? `#/chat/${i.id}_${me.id}` : '#/login'}">${ic('chat')} Chat with seller</a>
-            </div>`
+          ? me
+            ? `<div class="acts">
+                <a class="btn" href="https://wa.me/${wa(s.phone)}">${ic('phone')} WhatsApp seller</a>
+                <a class="btn alt" href="tel:${esc(s.phone)}">Call</a>
+                <a class="btn alt" id="chat-seller" href="#/chat/${i.id}_${me.id}">${ic('chat')} Chat with seller</a>
+              </div>`
+            : `<div class="acts">
+                <a class="btn" id="signup-contact" href="#/signup">${ic('user')} Sign up to contact seller</a>
+                <a class="btn alt" id="login-contact" href="#/login">Already have an account? Log in</a>
+              </div>`
           : i.status === 'available'
-            ? `<div class="acts"><a class="btn alt" id="chat-seller" href="${me ? `#/chat/${i.id}_${me.id}` : '#/login'}">${ic('chat')} Chat with seller</a></div>`
+            ? me
+              ? `<div class="acts"><a class="btn alt" id="chat-seller" href="#/chat/${i.id}_${me.id}">${ic('chat')} Chat with seller</a></div>`
+              : `<div class="acts">
+                  <a class="btn" id="signup-contact" href="#/signup">${ic('user')} Sign up to chat with seller</a>
+                  <a class="btn alt" id="login-contact" href="#/login">Already have an account? Log in</a>
+                </div>`
             : ''}
       <div class="acts">
         <button class="alt" id="sv">Save</button>
@@ -397,12 +407,14 @@ async function item(id) {
   });
 
   hook(i);
-  const chatSeller = $('#chat-seller');
-  if (chatSeller && !me) {
-    chatSeller.onclick = () => {
-      afterAuth = (user) => `#/chat/${i.id}_${user.id}`;
-    };
-  }
+  ['#signup-contact', '#login-contact'].forEach((selector) => {
+    const contactLink = $(selector);
+    if (contactLink) {
+      contactLink.onclick = () => {
+        afterAuth = (user) => `#/chat/${i.id}_${user.id}`;
+      };
+    }
+  });
   const d = $('#del');
   if (d) {
     d.onclick = async () => {
