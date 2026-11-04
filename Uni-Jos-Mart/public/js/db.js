@@ -24,9 +24,16 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { CLOUD, firebaseConfig } from "./firebase-config.js";
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = initializeFirestore(app);
+const hasFirebaseConfig = !!firebaseConfig && !!firebaseConfig.apiKey && !!firebaseConfig.projectId && !!firebaseConfig.appId;
+const app = hasFirebaseConfig ? initializeApp(firebaseConfig) : null;
+const auth = app ? getAuth(app) : null;
+const db = app ? initializeFirestore(app) : null;
+
+const ensureFirebaseRuntime = () => {
+  if (!app || !auth || !db) {
+    throw new Error('Firebase is not configured yet. Add your web app config to public/js/firebase-config.js and reload the page.');
+  }
+};
 
 const REQ = [
   'firstName',
@@ -127,6 +134,7 @@ const TTL = 0;
 let profileCache = null;
 
 const uid = async () => {
+  ensureFirebaseRuntime();
   await auth.authStateReady();
 
   if (!auth.currentUser) {
