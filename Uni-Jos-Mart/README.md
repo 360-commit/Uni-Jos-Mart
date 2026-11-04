@@ -1,45 +1,39 @@
-# Uni-Jos Mart (Firebase + Cloudinary)
-Static app: no server to run. Data in Firestore, login with Firebase Auth, photos on Cloudinary.
+# Uni-Jos Mart
 
-## Deploying to Vercel
-Set the project Root Directory to the repository root. The root `vercel.json` publishes `Uni-Jos-Mart/public/` as a static site. If you instead set the Vercel Root Directory to `Uni-Jos-Mart`, its `vercel.json` publishes `public/`. The obsolete `legacy/` JSON-file server is excluded. Do not set `legacy/` as the Vercel project root; its local file storage is not suitable for Vercel's serverless filesystem.
+Static marketplace frontend using Appwrite Cloud for authentication, database, and realtime updates, with Cloudinary for image uploads and delivery.
 
-## Setup (no card needed)
-1. console.firebase.google.com: create project, stay on Spark. Add a Web app and copy its config into `public/js/firebase-config.js`. Enable Google Analytics for the project (or enable it under Project settings > Integrations), then copy the web app's `measurementId` (starts with `G-`) into the same config file. Analytics screen tracking remains disabled until this value is set.
-2. Build > Authentication > Sign-in method: enable Email/Password.
-3. Build > Firestore Database: create (production mode), choose a region close to Nigeria (europe-west1 or eu-west2 are the nearest).
-4. cloudinary.com: free account. Settings > Upload > add an UNSIGNED upload preset (folder `unijosmart`, max file 5MB, allowed formats jpg,png,webp). Put cloud name and preset name in `firebase-config.js`.
-5. `npm i -g firebase-tools`, then `firebase login`, `firebase init` (reuse existing files), then `firebase deploy`. This publishes the site, the security rules and the indexes.
-6. Local test: `cd public && python3 -m http.server 8000` (add localhost to Auth > Settings > Authorized domains).
+## Appwrite setup
 
-## Crash prevention built in
-- Every list query is capped (40) and cached 45 seconds; seller details are copied into each item, so one page load costs about 40 reads, not hundreds.
-- Indexes for category and "my items" are declared in `firestore.indexes.json`; deploy them or filters will fail.
-- Chat listeners are closed when you leave a chat; messages are limited to 500 characters, 1 per second, last 60 loaded.
-- Photos are shrunk in the browser then optimized by Cloudinary; the database holds only a short link.
-- Offline cache is on, so repeat visits cost fewer reads on weak networks.
-- Quota or network errors show a friendly message instead of a blank page.
-- If signup loses its connection after creating the Firebase Auth account, retry with the same email and password to finish saving the profile; if setup already completed, log in instead.
-- Matric numbers are unique (enforced by the database), and security rules block editing other people's items, profiles and chats.
+1. Create an Appwrite Cloud project and add a **Web platform** for the deployed domain and `localhost` if you will test locally. Use the region-specific endpoint shown in the project console.
+2. Create one database. Create tables with these IDs (or change the IDs in `public/js/appwrite-config.js`):
+   - `users`: `payload` (required string, 16,384 chars), `ownerId` (string)
+   - `publicUsers`: `payload`, `ownerId`
+   - `items`: `payload`, `sellerId`, `category`, `created` (integer), `kw` (string array)
+   - `chats`: `payload`, `participants` (string array), `updated` (integer)
+   - `messages`: `payload`, `chatId`, `t` (integer), `from`
+   - `saved`: `payload`, `ownerId`, `t` (integer)
+   - `reports`: `payload`, `by`, `type`, `ref`, `t` (integer)
+   - `reviews`: `payload`, `sellerId`, `buyerId`, `t` (integer)
+   - `verified`: `payload`, `ownerId`
+   - `admins`: `payload`, `ownerId`
+   - `matrics`: `payload`, `ownerId`
 
-## Watch these
-- Spark free quota: 50,000 reads and 20,000 writes per day. Watch Usage in the console. If you pass it, the app pauses until the next day; add a card later (Blaze) with a budget alert.
-- Search only scans the newest 40 items. For many campuses, add Algolia or Typesense.
-- Old listings keep the seller's old name or phone after a profile edit.
-- Cloudinary free plan has monthly credits; check its dashboard.
-- Firebase Analytics records app screen views using generic screen names (for example `item` or `chat`), not item or chat IDs. Review the Analytics data in Firebase or Google Analytics.
+   Use string columns with enough capacity for the listed profile or listing data. Enable row security on every table. Add key indexes for item sorting/filtering (`created`, `sellerId + created`, `category + created`, `kw + created`), chats (`participants`, `updated`), messages (`chatId + t`), saved (`ownerId + t`), reviews (`sellerId + t`), and reports (`t`).
+3. Configure table-level access so authenticated users can create rows and public visitors can read the `items`, `publicUsers`, `reviews`, and `verified` tables. Keep row security enabled; the app assigns per-row read/write permissions for private profiles, saved items, and chats.
+4. Create a Cloudinary unsigned upload preset. Restrict it to image formats, a dedicated folder, and a suitable file size. The cloud name and preset are public values in `public/js/appwrite-config.js`; never put an Appwrite API key or Cloudinary API secret in client code.
+5. Copy the endpoint, project ID, database ID, and table IDs into `public/js/appwrite-config.js`. These are public client settings; **never put an Appwrite API key or server secret in this file**.
+6. Publish the static `public/` directory using the repository's existing Vercel configuration.
 
-## New in this version
-Search (keywords), Free / Giveaway category, meeting-point list, saved items, seller ratings (after the seller taps "Deal done" in the chat), report buttons, dark mode.
-- Run `firebase deploy` again so the new rules and the search index are published. A new index can take a few minutes to build.
-- Reports: Firebase console > Firestore > `reports`. Delete a listing there (items collection) if a report is valid.
-- Only items created after this update are searchable (they carry search keywords).
+To grant admin access, assign the `admin` label to the Appwrite user and create an `admins` row using that user's ID as the row ID, with `ownerId` set to the same ID and `payload` set to `{}`. Grant that user read access to the row.
 
-## Round 2: photos, chat images, verified badge, install as app
-- Up to 4 photos per item, photos in chat, installable app (Add to Home Screen) with offline shell.
-- Become admin: Firebase console > Authentication > copy your UID. Then Firestore > Start collection `admins` > Document ID = your UID > add any field (for example role = admin).
-- Admin tools: open `#/admin` in the app to see reports and delete items. On any seller reviews page you will see their matric number and email so you can check proof, then give or remove the Verified badge.
-- Run `firebase deploy` again to publish the new rules.
+## Important security and migration notes
 
-## Unread badge
-A small badge on the Chats tab (and the browser tab title) shows how many conversations have a new message. It uses one live listener limited to your 20 newest chats, so it costs about 20 reads at start and 1 per new message. Chats appear in the list after the first message. Run `firebase deploy` so the new rules and the chats index are published.
+- The Appwrite client integration is prepared for the project IDs, but this repository does not yet include a trusted Appwrite Function for validating all writes. Client-side checks and row permissions alone cannot enforce database rules against a modified browser client. Before a public launch, route sensitive writes (account profile/matric uniqueness, listing creation/status, chat creation/messages, reports, reviews, and admin actions) through an Appwrite Function that validates the signed-in user and input on the server. Do not treat the current client-only write paths as production-secure.
+- The new Appwrite project starts empty: no old accounts, listings, chats, saved items, reviews, or reports are migrated. Existing Cloudinary image URLs continue to work if their assets and account remain available. Users must create new Appwrite accounts.
+- The app requires the Appwrite tables, columns, indexes, and permissions above. Until its IDs are entered in the config, it reports that Appwrite is not configured.
+- The feed displays up to 40 listings. Search is applied to the newest 100 matching records.
+- Listing photos and chat photos upload to Cloudinary. Limit uploads in the Cloudinary preset.
+
+## Safety guidance
+
+Meet on campus, inspect an item before paying, and ask for proof of ownership and a receipt. Report suspicious listings or messages.

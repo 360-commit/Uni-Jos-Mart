@@ -1,5 +1,3 @@
-import { trackScreen } from "./analytics.js";
-
 const $ = (s) => document.querySelector(s);
 const renderLoadingState = (message = 'Loading Uni-Jos Mart…') => {
   const app = $('#app');
@@ -178,7 +176,15 @@ const nav = () => {
 
   const lo = $('#lo');
   if (lo) {
-    lo.onclick = () => {
+    lo.onclick = async (event) => {
+      event.preventDefault();
+      try {
+        await backend.out();
+      } catch (error) {
+        console.error('Could not sign out of Appwrite.', error);
+        toast(error.message, 'error');
+        return;
+      }
       adm = undefined;
       if (stopBadge) {
         stopBadge();
@@ -187,7 +193,6 @@ const nav = () => {
       unread = 0;
       inboxL = 0;
       document.title = 'Uni-Jos Mart';
-      fb.out();
       tk = '';
       localStorage.tk = '';
       me = null;
@@ -287,7 +292,7 @@ async function home() {
     ? `${card(recentListing)}<div class="feed-loading" role="status"><span class="spinner" aria-hidden="true"></span> Refreshing the feed…</div>`
     : '<div class="feed-loading" role="status"><span class="spinner" aria-hidden="true"></span> Loading listings…</div>';
 
-  liveFeedUnsub = fb.watchItems({ category: cat, q: qs }, (items, error) => {
+  liveFeedUnsub = backend.watchItems({ category: cat, q: qs }, (items, error) => {
     if (error) {
       grid.innerHTML = `${showRecent ? card(recentListing) : ''}<div class="panel">
         <p>${showRecent
@@ -472,7 +477,7 @@ function profile(signup) {
       <div class="row">${fld('firstName', 'First name', u.firstName)}${fld('surname', 'Surname', u.surname)}</div>
       ${fld('middleName', 'Middle name (optional)', u.middleName, 'text', 0)}
       <div class="row">${fld('phone', 'Phone number (WhatsApp)', u.phone, 'tel')}${fld('email', 'Email', u.email, 'email')}</div>
-      ${signup ? fld('password', 'Password (6+ characters)', '', 'password') : ''}
+      ${signup ? fld('password', 'Password (8+ characters)', '', 'password') : ''}
       <div class="row">${sel('faculty', 'Faculty', FAC, u.faculty)}${fld('department', 'Department', u.department)}</div>
       ${fld('matric', 'Matriculation number', u.matric)}
       ${fld('schoolAddress', 'School address (hostel or lodge in Jos)', u.schoolAddress)}
@@ -728,7 +733,7 @@ let unsub;
 async function inbox() {
   if (!me) return (location.hash = '#/login');
 
-  const L = inboxL || (inboxError ? [] : await fb.inbox());
+  const L = inboxL || (inboxError ? [] : await backend.inbox());
   $('#app').innerHTML = `<div class="panel">
     <h2>Chats</h2>
     ${inboxError ? `<p role="alert">Your chats could not be loaded. ${esc(inboxError)}</p><button id="retry-inbox">Try again</button>` : ''}
@@ -751,13 +756,13 @@ async function chat(id) {
     unsub = 0;
   }
   if (!me) {
-    const [itemId] = id.split('_');
-    afterAuth = (user) => `#/chat/${itemId}_${user.id}`;
+    afterAuth = () => `#/chat/${id}`;
     location.hash = '#/login';
     return;
   }
 
-  const c = await fb.chatOpen(...id.split('_'));
+  const c = await backend.chatOpen(id);
+  id = c.id;
   $('#app').innerHTML = `<div class="panel">
     <h2>${esc(c.title)}</h2>
     <div class="warn">Meet on campus and ask for a receipt before paying.</div>
@@ -779,7 +784,7 @@ async function chat(id) {
     ex.innerHTML = '<button id="dn">Deal done: mark sold</button>';
     $('#dn').onclick = async () => {
       try {
-        await fb.done(id, c.itemId);
+        await backend.done(id, c.itemId);
         toast('Marked sold. The buyer can now rate you.');
         chat(id);
       } catch (x) {
@@ -796,7 +801,7 @@ async function chat(id) {
     $('#rv').onsubmit = async (e) => {
       e.preventDefault();
       try {
-        await fb.review(id, c, +e.target.s.value, e.target.t.value);
+        await backend.review(id, c, +e.target.s.value, e.target.t.value);
         toast('Review sent');
         chat(id);
       } catch (x) {
@@ -809,7 +814,7 @@ async function chat(id) {
   $('#ci').onchange = async (e) => {
     try {
       if (e.target.files[0]) {
-        await fb.send(id, '', await shrink(e.target.files[0]));
+        await backend.send(id, '', await shrink(e.target.files[0]));
       }
     } catch (x) {
       toast(x.message);
@@ -821,7 +826,7 @@ async function chat(id) {
     const r = prompt('What is wrong with this chat? (scam, harassment, stolen item, spam)');
     if (r) {
       try {
-        await fb.report('chat', id, r);
+        await backend.report('chat', id, r);
         toast('Report sent. Thank you.');
       } catch {
         toast('You already reported this.');
@@ -854,7 +859,7 @@ async function chat(id) {
     messages.scrollTop = 1e9;
     if (retry) retry.hidden = true;
     status.textContent = '';
-    if (merged.length && merged[merged.length - 1].from !== me.id) fb.seen(id);
+    if (merged.length && merged[merged.length - 1].from !== me.id) backend.seen(id);
   };
 
   const showMessages = (L, error) => {
@@ -871,11 +876,11 @@ async function chat(id) {
     renderMessages(L);
   };
 
-  unsub = fb.watch(id, showMessages);
+  unsub = backend.watch(id, showMessages);
   $('#chat-retry').onclick = () => {
     if (unsub) unsub();
     $('#chat-status').textContent = 'Reconnecting to this chat…';
-    unsub = fb.watch(id, showMessages);
+    unsub = backend.watch(id, showMessages);
   };
 
   $('#mf').onsubmit = async (e) => {
@@ -897,7 +902,7 @@ async function chat(id) {
     setFormLoading(form, true, 'Sending…');
 
     try {
-      await fb.send(id, t);
+      await backend.send(id, t);
       e.target.t.value = '';
       const active = pendingMessages.get(id) || [];
       pendingMessages.set(id, active.filter((message) => message.localId !== optimistic.localId));
@@ -925,7 +930,7 @@ const isNew = (c) => c.lastFrom && me && c.lastFrom !== me.id
 
 function hook(i) {
   const sv = $('#sv');
-  fb.verified(i.sellerId)
+  backend.verified(i.sellerId)
     .then((v) => {
       if (v) $('#vb').innerHTML = VB;
     })
@@ -938,10 +943,10 @@ function hook(i) {
     sv.style.display = 'none';
   } else {
     const set = (v) => (sv.textContent = v ? 'Saved' : 'Save');
-    fb.isSaved(i.id).then(set).catch(() => {});
+    backend.isSaved(i.id).then(set).catch(() => {});
     sv.onclick = async () => {
       try {
-        set(await fb.toggleSave(i));
+        set(await backend.toggleSave(i));
       } catch (x) {
         toast(x.message);
       }
@@ -954,7 +959,7 @@ function hook(i) {
     const r = prompt('Why are you reporting this listing? (stolen item, scam, spam, abuse)');
     if (r) {
       try {
-        await fb.report('item', i.id, r);
+        await backend.report('item', i.id, r);
         toast('Report sent. Thank you.');
       } catch {
         toast('You already reported this.');
@@ -966,7 +971,7 @@ function hook(i) {
 async function saved() {
   if (!me) return (location.hash = '#/login');
 
-  const L = await fb.saved();
+  const L = await backend.saved();
   $('#app').innerHTML = `<div class="panel">
     <h2>Saved <span>items</span></h2>
     <p>Items you saved to check later.</p>
@@ -976,10 +981,10 @@ async function saved() {
 }
 
 async function seller(id) {
-  adm ??= me ? await fb.isAdmin() : false;
-  const r = await fb.reviews(id);
-  const ver = await fb.verified(id);
-  const pv = adm ? await fb.priv(id) : 0;
+  adm ??= me ? await backend.isAdmin() : false;
+  const r = await backend.reviews(id);
+  const ver = await backend.verified(id);
+  const pv = adm ? await backend.priv(id) : 0;
   const n = r.list.length;
   const a = n ? (r.list.reduce((t, x) => t + x.stars, 0) / n).toFixed(1) : 0;
 
@@ -1000,7 +1005,7 @@ async function seller(id) {
   if (adm && pv) {
     $('#vt').onclick = async () => {
       try {
-        await fb.setVerified(id, !ver);
+        await backend.setVerified(id, !ver);
         toast('Updated');
         seller(id);
       } catch (x) {
@@ -1011,13 +1016,13 @@ async function seller(id) {
 }
 
 async function admin() {
-  adm ??= me ? await fb.isAdmin() : false;
+  adm ??= me ? await backend.isAdmin() : false;
   if (!adm) {
     $('#app').innerHTML = '<div class="panel"><h2>Not allowed</h2><p>This page is for Uni-Jos Mart admins.</p></div>';
     return;
   }
 
-  const L = await fb.reports();
+  const L = await backend.reports();
   $('#app').innerHTML = `<div class="panel"><h2>Reports</h2><p>Newest 30.</p></div>
     ${L.map((r) => `<div class="panel" style="box-shadow:none">
       <b>${esc(r.type)}</b>: ${esc(r.reason)}
@@ -1030,14 +1035,14 @@ async function admin() {
   document.querySelectorAll('[data-di]').forEach((b) => {
     b.onclick = async () => {
       if (confirm('Delete this item?')) {
-        await fb.delItem(b.dataset.di);
+        await backend.delItem(b.dataset.di);
         toast('Item deleted');
       }
     };
   });
   document.querySelectorAll('[data-dr]').forEach((b) => {
     b.onclick = async () => {
-      await fb.delReport(b.dataset.dr);
+      await backend.delReport(b.dataset.dr);
       admin();
     };
   });
@@ -1049,7 +1054,7 @@ async function route() {
     unsub = 0;
   }
   if (me && !stopBadge) {
-    stopBadge = fb.watchInbox((L, error) => {
+    stopBadge = backend.watchInbox((L, error) => {
       if (error) {
         console.error('Could not load the chat list.', error);
         inboxError = error.message;
@@ -1070,14 +1075,6 @@ async function route() {
   const k = (location.hash || '').match(/^#\/chat\/(\w+)$/);
   const h = (location.hash || '#/').slice(1);
   const m = h.match(/^\/item\/(\w+)/);
-  const screen = h.startsWith('/item/') ? 'item'
-    : h.startsWith('/seller/') ? 'seller'
-      : h.startsWith('/chat/') ? 'chat'
-        : ['inbox', 'saved', 'admin', 'sell', 'mine', 'profile', 'signup', 'login']
-          .find((name) => h === '/' + name) || 'home';
-  trackScreen(screen).catch((error) => {
-    console.error("Firebase Analytics could not record a screen view.", error);
-  });
   window.scrollTo(0, 0);
 
   try {
