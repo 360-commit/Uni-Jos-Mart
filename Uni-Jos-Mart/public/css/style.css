@@ -265,6 +265,8 @@ button:disabled{opacity:.78;cursor:wait;transform:none}
   border-top-color:#fff;border-radius:50%;
   animation:spin .7s linear infinite;
 }
+.feed-loading{display:flex;align-items:center;gap:10px;padding:18px;color:var(--muted)}
+.feed-loading .spinner{border-color:var(--border);border-top-color:var(--orange)}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.spinner{animation-duration:1.6s}}
 

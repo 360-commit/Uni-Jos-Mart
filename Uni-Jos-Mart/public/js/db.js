@@ -128,6 +128,7 @@ const words = (value) => [
 
 const cache = new Map();
 const TTL = 45e3;
+let profileCache = null;
 
 const uid = async () => {
   await auth.authStateReady();
@@ -139,9 +140,18 @@ const uid = async () => {
   return auth.currentUser.uid;
 };
 
-const mine = async () => (
-  await getDoc(doc(db, 'users', await uid()))
-).data();
+const mine = async () => {
+  const id = await uid();
+  if (profileCache?.id === id) return profileCache;
+
+  const snapshot = await getDoc(doc(db, 'users', id));
+  if (!snapshot.exists()) {
+    throw new Error('Your account profile could not be found. Please contact support.');
+  }
+
+  profileCache = snapshot.data();
+  return profileCache;
+};
 
 async function route(path, options) {
   const [pathname, queryString] = path.split('?');
@@ -188,6 +198,7 @@ async function route(path, options) {
       batch.set(doc(db, 'publicUsers', id), pubOf(user));
       await batch.commit();
 
+      profileCache = user;
       return { token: 'fb', user };
     } catch (error) {
       await credential.user.delete().catch(() => {});
@@ -199,13 +210,20 @@ async function route(path, options) {
   }
 
   if (pathname === '/login') {
-    await signInWithEmailAndPassword(
+    const credential = await signInWithEmailAndPassword(
       auth,
       String(body.email || '').trim().toLowerCase(),
       body.password || '',
     );
 
-    return { token: 'fb', user: await mine() };
+    profileCache = null;
+    return {
+      token: 'fb',
+      user: {
+        id: credential.user.uid,
+        email: credential.user.email,
+      },
+    };
   }
 
   if (pathname === '/me') {
@@ -231,6 +249,7 @@ async function route(path, options) {
       batch.set(doc(db, 'users', id), user);
       batch.set(doc(db, 'publicUsers', id), pubOf(user));
       await batch.commit();
+      profileCache = user;
       cache.clear();
 
       return user;
@@ -288,7 +307,6 @@ async function route(path, options) {
 
   if (pathname === '/items' && method === 'POST') {
     const id = await uid();
-    const user = await mine();
 
     if (
       !body.title
@@ -299,7 +317,10 @@ async function route(path, options) {
       throw new Error('Title, price, category and the proof-of-ownership confirmation are required.');
     }
 
-    const images = await Promise.all((body.images || []).slice(0, 4).map(up));
+    const [user, images] = await Promise.all([
+      mine(),
+      Promise.all((body.images || []).slice(0, 4).map(up)),
+    ]);
     const item = {
       sellerId: id,
       title: String(body.title).slice(0, 80),
@@ -373,7 +394,10 @@ window.api = async (path, options = {}) => {
 let last = 0;
 
 window.fb = {
-  out: () => signOut(auth),
+  out: async () => {
+    profileCache = null;
+    await signOut(auth);
+  },
 
   async chatOpen(itemId, buyer) {
     const userId = await uid();

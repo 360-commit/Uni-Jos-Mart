@@ -3,7 +3,10 @@ import { trackScreen } from "./analytics.js";
 const $ = (s) => document.querySelector(s);
 let tk = localStorage.tk || '';
 let me = null;
+let profileReady = false;
+let profileLoadFailed = false;
 let afterAuth = () => '#/';
+let recentListing = null;
 
 const P = {
   home: '<path d="M3 11l9-8 9 8v10H3z"/>',
@@ -61,7 +64,14 @@ function setFormLoading(form, loading, message) {
     button.setAttribute('aria-busy', 'true');
     button.innerHTML = `<span class="spinner" aria-hidden="true"></span><span>${message}</span>`;
     form.setAttribute('aria-busy', 'true');
+    button.dataset.loadingTimer = setTimeout(() => {
+      if (button.isConnected && button.disabled) {
+        button.lastElementChild.textContent = 'Still working… please keep this page open.';
+      }
+    }, 8000);
   } else {
+    clearTimeout(Number(button.dataset.loadingTimer));
+    delete button.dataset.loadingTimer;
     button.disabled = false;
     button.removeAttribute('aria-busy');
     button.textContent = button.dataset.label || button.textContent;
@@ -112,16 +122,21 @@ const FAC = [
 ];
 const STATES = 'Abia,Adamawa,Akwa Ibom,Anambra,Bauchi,Bayelsa,Benue,Borno,Cross River,Delta,Ebonyi,Edo,Ekiti,Enugu,FCT Abuja,Gombe,Imo,Jigawa,Kaduna,Kano,Katsina,Kebbi,Kogi,Kwara,Lagos,Nasarawa,Niger,Ogun,Ondo,Osun,Oyo,Plateau,Rivers,Sokoto,Taraba,Yobe,Zamfara'.split(',');
 
-const shrink = (f) => new Promise((ok) => {
+const shrink = (f) => new Promise((ok, fail) => {
   const r = new FileReader();
+  r.onerror = () => fail(new Error('Could not read this photo.'));
   r.onload = () => {
     const i = new Image();
+    i.onerror = () => fail(new Error('This photo could not be opened.'));
     i.onload = () => {
+      if (!i.width || !i.height) return fail(new Error('This photo has invalid dimensions.'));
       const k = Math.min(1, 700 / Math.max(i.width, i.height));
       const c = document.createElement('canvas');
       c.width = i.width * k;
       c.height = i.height * k;
-      c.getContext('2d').drawImage(i, 0, 0, c.width, c.height);
+      const context = c.getContext('2d');
+      if (!context) return fail(new Error('Could not prepare this photo.'));
+      context.drawImage(i, 0, 0, c.width, c.height);
       ok(c.toDataURL('image/jpeg', 0.72));
     };
     i.src = r.result;
@@ -169,6 +184,8 @@ const nav = () => {
       tk = '';
       localStorage.tk = '';
       me = null;
+      profileReady = false;
+      profileLoadFailed = false;
       nav();
     };
   }
@@ -233,10 +250,27 @@ async function home() {
   });
 
   const grid = $('#g');
-  const L = await api(`/items?cat=${encodeURIComponent(cat)}&q=${encodeURIComponent(qs)}`);
+  const showRecent = recentListing && !cat && !qs;
+  grid.innerHTML = showRecent
+    ? `${card(recentListing)}<div class="feed-loading" role="status"><span class="spinner" aria-hidden="true"></span> Refreshing the feed…</div>`
+    : '<div class="feed-loading" role="status"><span class="spinner" aria-hidden="true"></span> Loading listings…</div>';
+  let L;
+  try {
+    L = await api(`/items?cat=${encodeURIComponent(cat)}&q=${encodeURIComponent(qs)}`);
+  } catch (error) {
+    if (!showRecent || !grid.isConnected) throw error;
+    grid.innerHTML = `${card(recentListing)}<div class="panel"><p>Your listing is published. The rest of the feed could not be refreshed.</p><button id="rf">Try again</button></div>`;
+    $('#rf').onclick = home;
+    tilt();
+    return;
+  }
   if (!grid.isConnected) return;
-  grid.innerHTML = L.length
-    ? L.map(card).join('')
+  const items = showRecent
+    ? [recentListing, ...L.filter((item) => item.id !== recentListing.id)]
+    : L;
+  if (showRecent) recentListing = null;
+  grid.innerHTML = items.length
+    ? items.map(card).join('')
     : '<div class="panel"><h2>Nothing here yet</h2><p>Be the first to list an item in this category.</p></div>';
   tilt();
 }
@@ -355,6 +389,14 @@ const sel = (n, l, a, v = '') => (
 function profile(signup) {
   const u = signup ? {} : me;
   if (!signup && !me) return (location.hash = '#/login');
+  if (!signup && !profileReady) {
+    $('#app').innerHTML = profileLoadFailed
+      ? '<div class="panel"><h2>Profile not loaded</h2><p>Your profile is taking longer to load. Check your connection and try again.</p><button id="pr">Try again</button></div>'
+      : '<div class="panel"><h2>Loading your profile…</h2><div class="feed-loading" role="status"><span class="spinner" aria-hidden="true"></span> Please wait a moment.</div></div>';
+    const retry = $('#pr');
+    if (retry) retry.onclick = () => loadProfile(me.id);
+    return;
+  }
   let ph = u.photo || '';
 
   $('#app').innerHTML = `<div class="panel">
@@ -387,9 +429,16 @@ function profile(signup) {
   }
 
   $('#pi').onchange = async (e) => {
-    ph = await shrink(e.target.files[0]);
-    $('#ph').style.backgroundImage = `url(${ph})`;
-    $('#ph').innerHTML = '';
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      ph = await shrink(file);
+      $('#ph').style.backgroundImage = `url(${ph})`;
+      $('#ph').innerHTML = '';
+    } catch (error) {
+      toast('Could not prepare that profile photo. Choose another image or try a smaller one.', 'error');
+      console.error('Could not prepare profile photo.', error);
+    }
   };
 
   $('#pf').onsubmit = async (e) => {
@@ -407,12 +456,14 @@ function profile(signup) {
         tk = r.token;
         localStorage.tk = tk;
         me = r.user;
+        profileReady = true;
         const destination = afterAuth(me);
         afterAuth = () => '#/';
         location.hash = destination;
         toast('👋 Welcome to Uni-Jos Mart! You can now buy and sell.', 'success');
       } else {
         me = await api('/me', { method: 'PUT', body: b });
+        profileReady = true;
         toast('✅ Profile saved successfully!', 'success');
       }
       nav();
@@ -456,8 +507,11 @@ function login() {
       const destination = afterAuth(me);
       afterAuth = () => '#/';
       location.hash = destination;
+      profileReady = false;
+      profileLoadFailed = false;
       toast('✅ Logged in! Welcome back.', 'success');
       nav();
+      loadProfile(r.user.id);
     } catch (x) {
       const message = authError(x);
       $('#er').textContent = message;
@@ -469,6 +523,26 @@ function login() {
   wirePasswordToggle();
 }
 
+function loadProfile(id) {
+  profileLoadFailed = false;
+  api('/me').then((user) => {
+    if (!me || me.id !== id || user.id !== id) return;
+    me = user;
+    profileReady = true;
+    nav();
+    if (location.hash === '#/profile') profile(0);
+  }).catch((error) => {
+    if (me?.id !== id) return;
+    profileLoadFailed = true;
+    console.error('Could not load the signed-in user profile.', error);
+    if (location.hash === '#/profile') {
+      profile(0);
+    } else {
+      toast('You are signed in, but your profile is taking longer to load. Check your connection and try again.', 'error');
+    }
+  });
+}
+
 function sell() {
   if (!me) {
     afterAuth = () => '#/sell';
@@ -477,6 +551,7 @@ function sell() {
   }
 
   let im = [];
+  let preparingPhotos = false;
   $('#app').innerHTML = `<div class="panel">
     <h2>Sell <span>an item</span></h2>
     <form id="sf2">
@@ -511,19 +586,38 @@ function sell() {
       return;
     }
 
-    im = await Promise.all(files.map(shrink));
-    $('#ph').style.backgroundImage = im.length ? `url(${im[0]})` : '';
-    $('#ph').innerHTML = im.length ? '' : ic('cam');
-    $('#photo-help').textContent = `${im.length} photo${im.length === 1 ? '' : 's'} selected.`;
-    $('#photo-preview').innerHTML = im.slice(1).map((photo, index) => (
-      `<div class="photo preview" style="width:64px;height:64px;background-image:url(${photo})" aria-label="Photo ${index + 2}"></div>`
-    )).join('');
+    preparingPhotos = files.length > 0;
+    if (preparingPhotos) setFormLoading($('#sf2'), true, 'Preparing photos…');
+    $('#photo-help').textContent = files.length ? 'Preparing your photos…' : 'Choose clear photos. Images are resized automatically.';
+    try {
+      im = await Promise.all(files.map(shrink));
+      $('#ph').style.backgroundImage = im.length ? `url(${im[0]})` : '';
+      $('#ph').innerHTML = im.length ? '' : ic('cam');
+      $('#photo-help').textContent = `${im.length} photo${im.length === 1 ? '' : 's'} ready to publish.`;
+      $('#photo-preview').innerHTML = im.slice(1).map((photo, index) => (
+        `<div class="photo preview" style="width:64px;height:64px;background-image:url(${photo})" aria-label="Photo ${index + 2}"></div>`
+      )).join('');
+    } catch (error) {
+      im = [];
+      $('#photo-help').textContent = 'Could not prepare those photos. Choose them again or try smaller images.';
+      toast('Could not prepare those photos. Choose them again or try smaller images.', 'error');
+      console.error('Could not prepare listing photos.', error);
+    } finally {
+      if (preparingPhotos) {
+        preparingPhotos = false;
+        setFormLoading($('#sf2'), false);
+      }
+    }
   };
 
   $('#sf2').onsubmit = async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
     if (form.dataset.submitting === 'true') return;
+    if (preparingPhotos) {
+      $('#er').textContent = 'Please wait while your photos are prepared.';
+      return;
+    }
 
     const b = Object.fromEntries(new FormData(form));
     b.images = im;
@@ -538,7 +632,10 @@ function sell() {
     $('#er').textContent = '';
     setFormLoading(form, true, 'Publishing your listing…');
     try {
-      await api('/items', { method: 'POST', body: b });
+      const i = await api('/items', { method: 'POST', body: b });
+      recentListing = i;
+      cat = '';
+      qs = '';
       toast('🎉 Your listing was published successfully and is now in the feed.', 'success');
       location.hash = '#/';
     } catch (x) {
@@ -853,6 +950,7 @@ addEventListener('hashchange', route);
   if (tk) {
     try {
       me = await api('/me');
+      profileReady = true;
     } catch {
       tk = '';
       localStorage.tk = '';
