@@ -507,6 +507,40 @@ window.fb = {
       .map((document) => ({ id: document.id, ...document.data() }))
       .sort((a, b) => (b.updated || 0) - (a.updated || 0));
   },
+
+  watchItems(filters = {}, callback) {
+    const searchText = String(filters.q || '').trim().toLowerCase();
+    const searchWords = words(searchText).sort((a, b) => b.length - a.length);
+    const constraints = [];
+
+    if (searchWords.length) {
+      constraints.push(where('kw', 'array-contains', searchWords[0]));
+    } else if (filters.category) {
+      constraints.push(where('category', '==', filters.category));
+    }
+
+    return onSnapshot(
+      query(
+        collection(db, 'items'),
+        ...constraints,
+        orderBy('created', 'desc'),
+        limit(40),
+      ),
+      (snapshot) => {
+        let items = snapshot.docs.map((document) => ({ id: document.id, ...document.data() }));
+
+        if (searchWords.length) {
+          items = items.filter((item) => (
+            searchWords.every((word) => (item.kw || []).some((keyword) => keyword.startsWith(word)))
+            && (!filters.category || item.category === filters.category)
+          ));
+        }
+
+        callback(items, null);
+      },
+      (error) => callback([], fail(error)),
+    );
+  },
 };
 
 Object.assign(window.fb, {

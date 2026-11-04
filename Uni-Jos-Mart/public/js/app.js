@@ -7,8 +7,7 @@ let profileReady = false;
 let profileLoadFailed = false;
 let afterAuth = () => '#/';
 let recentListing = null;
-let feedCache = { items: [], fromCache: false, loadedAt: 0 };
-let feedRequest = null;
+let liveFeedUnsub = 0;
 
 const P = {
   home: '<path d="M3 11l9-8 9 8v10H3z"/>',
@@ -253,59 +252,60 @@ async function home() {
 
   const grid = $('#g');
   const showRecent = recentListing && !cat && !qs;
-  const feedKey = `cat=${encodeURIComponent(cat)}&q=${encodeURIComponent(qs)}`;
-  const cached = (!cat && !qs && feedCache.items.length) ? feedCache.items : null;
-
-  if (cached) {
-    const items = showRecent
-      ? [recentListing, ...cached.filter((item) => item.id !== recentListing.id)]
-      : cached;
-    grid.innerHTML = items.map(card).join('');
-    if (showRecent && !recentListing) recentListing = null;
-    tilt();
-  } else {
-    grid.innerHTML = showRecent
-      ? `${card(recentListing)}<div class="feed-loading" role="status"><span class="spinner" aria-hidden="true"></span> Refreshing the feed…</div>`
-      : '<div class="feed-loading" role="status"><span class="spinner" aria-hidden="true"></span> Loading listings…</div>';
-  }
-
-  const fetchFeed = async () => {
-    const key = feedKey;
-    if (feedRequest && feedRequest.key === key) return feedRequest.promise;
-
-    feedRequest = {
-      key,
-      promise: api(`/items?${feedKey}`)
-        .then((L) => {
-          feedCache = { items: L, fromCache: !!L.fromCache, loadedAt: Date.now() };
-          return L;
-        })
-        .finally(() => {
-          if (feedRequest && feedRequest.key === key) feedRequest = null;
-        }),
-    };
-
-    return feedRequest.promise;
-  };
-
-  try {
-    const L = await fetchFeed();
+  const renderFeed = (items, offline = false) => {
     if (!grid.isConnected) return;
-    const items = showRecent
-      ? [recentListing, ...L.filter((item) => item.id !== recentListing.id)]
-      : L;
-    if (showRecent && !L.fromCache) recentListing = null;
-    grid.innerHTML = items.length
-      ? items.map(card).join('')
-      : L.fromCache
+    const list = showRecent
+      ? [recentListing, ...items.filter((item) => item.id !== recentListing.id)]
+      : items;
+    grid.innerHTML = list.length
+      ? list.map(card).join('')
+      : offline
         ? '<div class="panel"><p>No saved listings are available. Connect to the internet to load the marketplace.</p></div>'
         : '<div class="panel"><h2>Nothing here yet</h2><p>Be the first to list an item in this category.</p></div>';
-    if (L.fromCache) {
+    if (offline) {
       grid.insertAdjacentHTML('beforeend', `<div class="panel">
         <p>Showing saved listings. This offline list may not include listings from other students.</p>
         <button id="rf">Try loading all listings</button>
       </div>`);
       $('#rf').onclick = home;
+    }
+    tilt();
+  };
+
+  if (liveFeedUnsub) {
+    liveFeedUnsub();
+    liveFeedUnsub = 0;
+  }
+
+  grid.innerHTML = showRecent
+    ? `${card(recentListing)}<div class="feed-loading" role="status"><span class="spinner" aria-hidden="true"></span> Refreshing the feed…</div>`
+    : '<div class="feed-loading" role="status"><span class="spinner" aria-hidden="true"></span> Loading listings…</div>';
+
+  liveFeedUnsub = fb.watchItems({ category: cat, q: qs }, (items, error) => {
+    if (error) {
+      grid.innerHTML = `${showRecent ? card(recentListing) : ''}<div class="panel">
+        <p>${showRecent
+          ? 'Your listing is published, but we could not load the rest of the student marketplace.'
+          : 'We could not load listings from the student marketplace.'} ${esc(error.message)}</p>
+        <button id="rf">Try again</button>
+      </div>`;
+      $('#rf').onclick = home;
+      tilt();
+      return;
+    }
+
+    const safeItems = Array.isArray(items) ? items : [];
+    if (showRecent && !safeItems.some((item) => item.id === recentListing?.id) && recentListing) {
+      safeItems.unshift(recentListing);
+    }
+    renderFeed(safeItems, false);
+  });
+
+  try {
+    const L = await api(`/items?cat=${encodeURIComponent(cat)}&q=${encodeURIComponent(qs)}`);
+    if (Array.isArray(L)) {
+      const safeItems = L.filter((item) => item && item.id);
+      renderFeed(safeItems, !!L.fromCache);
     }
   } catch (error) {
     if (!grid.isConnected) return;
@@ -317,7 +317,6 @@ async function home() {
     </div>`;
     $('#rf').onclick = home;
   }
-  tilt();
 }
 
 async function mine() {
