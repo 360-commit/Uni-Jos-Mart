@@ -1,6 +1,12 @@
 import { trackScreen } from "./analytics.js";
 
 const $ = (s) => document.querySelector(s);
+const renderLoadingState = (message = 'Loading Uni-Jos Mart…') => {
+  const app = $('#app');
+  if (!app) return;
+  app.innerHTML = `<div class="panel"><h2>Loading <span>app</span></h2><div class="feed-loading" role="status"><span class="spinner" aria-hidden="true"></span> ${message}</div></div>`;
+};
+
 let tk = localStorage.tk || '';
 let me = null;
 let profileReady = false;
@@ -1082,14 +1088,25 @@ async function route() {
 
 addEventListener('hashchange', route);
 (async () => {
-  if (tk) {
-    try {
-      me = await api('/me');
-      profileReady = true;
-    } catch {
-      tk = '';
-      localStorage.tk = '';
+  renderLoadingState();
+  try {
+    if (typeof window.api !== 'function') {
+      throw new Error('Loading app…');
     }
+    if (tk) {
+      try {
+        me = await api('/me');
+        profileReady = true;
+      } catch {
+        tk = '';
+        localStorage.tk = '';
+      }
+    }
+    route();
+  } catch {
+    renderLoadingState('Starting the app… please wait a moment.');
+    setTimeout(() => {
+      window.location.reload();
+    }, 1500);
   }
-  route();
 })();
