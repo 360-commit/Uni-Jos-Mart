@@ -22,7 +22,8 @@ Static marketplace frontend using Appwrite Cloud for authentication, database, a
 3. Configure table-level access so authenticated users can create rows and public visitors can read the `items`, `publicUsers`, `reviews`, and `verified` tables. Keep row security enabled; the app assigns per-row read/write permissions for private profiles, saved items, and chats.
 4. Create a Cloudinary unsigned upload preset. Restrict it to image formats, a dedicated folder, and a suitable file size. The cloud name and preset are public values in `public/js/appwrite-config.js`; never put an Appwrite API key or Cloudinary API secret in client code.
 5. Copy the endpoint, project ID, database ID, and table IDs into `public/js/appwrite-config.js`. These are public client settings; **never put an Appwrite API key or server secret in this file**.
-6. Publish the static `public/` directory using the repository's existing Vercel configuration.
+6. To enable free Appwrite Analytics, add your deployed domain as a **Web app** in the Appwrite project, then create an Analytics property for the site. Copy its property ID into `analyticsPropertyId` in `public/js/appwrite-config.js`. Analytics is disabled while this value is blank. The Free plan includes 50,000 events per month, one property per project, and 30 days of dashboard retention; automatic pageviews, outbound link clicks, scroll depth, and engagement time all count toward that event limit. Tracking respects the browser's Do Not Track setting.
+7. Publish the static `public/` directory using the repository's existing Vercel configuration.
 
 To grant admin access, assign the `admin` label to the Appwrite user and create an `admins` row using that user's ID as the row ID, with `ownerId` set to the same ID and `payload` set to `{}`. Grant that user read access to the row.
 

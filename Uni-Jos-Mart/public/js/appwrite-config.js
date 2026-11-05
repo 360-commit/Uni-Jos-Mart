@@ -1,8 +1,9 @@
 // Fill Appwrite project IDs from the Cloud console before deploying.
 export const appwriteConfig = {
-	endpoint: "",
-	projectId: "",
-	databaseId: "",
+	endpoint: "https://fra.cloud.appwrite.io/v1",
+	projectId: "6aec1cca000f92d229b0",
+	databaseId: "6aec220f00145764cfe0",
+	analyticsPropertyId: "",
 	tables: {
 		users: "users",
 		publicUsers: "publicUsers",
