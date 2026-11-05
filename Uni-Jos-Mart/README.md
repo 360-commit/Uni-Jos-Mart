@@ -25,7 +25,7 @@ Static marketplace frontend using Appwrite Cloud for authentication, database, a
 6. To enable free Appwrite Analytics, add your deployed domain as a **Web app** in the Appwrite project, then create an Analytics property for the site. Copy its property ID into `analyticsPropertyId` in `public/js/appwrite-config.js`. Analytics is disabled while this value is blank. The Free plan includes 50,000 events per month, one property per project, and 30 days of dashboard retention; automatic pageviews, outbound link clicks, scroll depth, and engagement time all count toward that event limit. Tracking respects the browser's Do Not Track setting.
 7. Publish the static `public/` directory using the repository's existing Vercel configuration.
 
-The login screen includes password recovery. Appwrite redirects reset emails to the app's deployed root URL; make sure that hostname is added as a Web platform in the project. Users can request a reset link from **Forgot your password?**, then choose a new password from the email link.
+The login screen includes password recovery. Appwrite redirects reset emails to the app's deployed root URL; make sure that hostname is added as a Web platform in the project. Users can request a reset link from **Forgot your password?**, then choose a new password from the email link. Signup and password reset show a live strength guide; passwords must still be at least 8 characters.
 
 To grant admin access, assign the `admin` label to the Appwrite user and create an `admins` row using that user's ID as the row ID, with `ownerId` set to the same ID and `payload` set to `{}`. Grant that user read access to the row.
 

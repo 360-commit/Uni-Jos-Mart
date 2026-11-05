@@ -437,6 +437,17 @@ const fld = (n, l, v = '', t = 'text', r = 1) => (
     : `<div><label>${l}</label><input name="${n}" type="${t}" value="${esc(v)}" ${r ? 'required' : ''}></div>`
 );
 
+const passwordWithStrength = (name, label) => (
+  `${fld(name, label, '', 'password')}`
+  + `<div class="password-strength" data-password-strength="${name}">
+      <div class="strength-track" role="progressbar" aria-label="Password strength" aria-valuemin="0" aria-valuemax="6" aria-valuenow="0" aria-valuetext="No password entered">
+        <span></span>
+      </div>
+      <p class="strength-label" aria-live="polite">Enter a password to see its strength.</p>
+      <p class="mu">Longer passwords with a mix of letters, numbers, and symbols are stronger.</p>
+    </div>`
+);
+
 function wirePasswordToggle() {
   document.querySelectorAll('.password-toggle').forEach((button) => {
     button.onclick = () => {
@@ -449,6 +460,42 @@ function wirePasswordToggle() {
     };
   });
 }
+
+function wirePasswordStrength() {
+  document.querySelectorAll('[data-password-strength]').forEach((meter) => {
+    const input = document.getElementById(meter.dataset.passwordStrength);
+    const track = meter.querySelector('.strength-track');
+    const label = meter.querySelector('.strength-label');
+    if (!input || !track || !label) return;
+
+    input.addEventListener('input', () => {
+      const password = input.value;
+      const score = [
+        password.length >= 8,
+        password.length >= 12,
+        password.length >= 16,
+        /[a-z]/.test(password) && /[A-Z]/.test(password),
+        /\d/.test(password),
+        /[^A-Za-z0-9]/.test(password),
+      ].filter(Boolean).length;
+      const strength = password.length === 0
+        ? ''
+        : score <= 2 ? 'weak' : score === 3 ? 'fair' : score === 4 ? 'good' : 'strong';
+      const text = strength
+        ? `${strength[0].toUpperCase()}${strength.slice(1)}`
+        : 'No password entered';
+
+      meter.dataset.strength = strength;
+      track.setAttribute('aria-valuenow', String(score));
+      track.setAttribute('aria-valuetext', text);
+      track.querySelector('span').style.width = `${(score / 6) * 100}%`;
+      label.textContent = password.length
+        ? `${text}${password.length < 8 ? ' — use at least 8 characters.' : ''}`
+        : 'Enter a password to see its strength.';
+    });
+  });
+}
+
 const sel = (n, l, a, v = '') => (
   `<div><label>${l}</label><select name="${n}" required><option value="">Select</option>${a.map((x) => `<option ${x === v ? 'selected' : ''}>${x}</option>`).join('')}</select></div>`
 );
@@ -477,7 +524,7 @@ function profile(signup) {
       <div class="row">${fld('firstName', 'First name', u.firstName)}${fld('surname', 'Surname', u.surname)}</div>
       ${fld('middleName', 'Middle name (optional)', u.middleName, 'text', 0)}
       <div class="row">${fld('phone', 'Phone number (WhatsApp)', u.phone, 'tel')}${fld('email', 'Email', u.email, 'email')}</div>
-      ${signup ? fld('password', 'Password (8+ characters)', '', 'password') : ''}
+      ${signup ? passwordWithStrength('password', 'Password (8+ characters)') : ''}
       <div class="row">${sel('faculty', 'Faculty', FAC, u.faculty)}${fld('department', 'Department', u.department)}</div>
       ${fld('matric', 'Matriculation number', u.matric)}
       ${fld('schoolAddress', 'School address (hostel or lodge in Jos)', u.schoolAddress)}
@@ -545,6 +592,7 @@ function profile(signup) {
     }
   };
   wirePasswordToggle();
+  wirePasswordStrength();
 }
 
 function login() {
@@ -637,7 +685,7 @@ function resetPassword(userId, secret) {
   $('#app').innerHTML = `<div class="panel">
     <h2>Choose a new <span>password</span></h2>
     <form id="cf">
-      ${fld('password', 'New password (8+ characters)', '', 'password')}
+      ${passwordWithStrength('password', 'New password (8+ characters)')}
       ${fld('passwordAgain', 'Confirm new password', '', 'password')}
       <p class="err" id="er"></p>
       <button>Save new password</button>
@@ -666,6 +714,7 @@ function resetPassword(userId, secret) {
     }
   };
   wirePasswordToggle();
+  wirePasswordStrength();
 }
 
 function loadProfile(id) {

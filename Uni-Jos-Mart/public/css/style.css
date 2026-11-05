@@ -411,6 +411,18 @@ label{display:block;font-weight:500;font-size:14px;margin-bottom:4px;color:var(-
 .password-input{display:flex}
 .password-input input{min-width:0;border-radius:var(--r-sm) 0 0 var(--r-sm)}
 .password-toggle{border-radius:0 var(--r-sm) var(--r-sm) 0;padding:0 16px;box-shadow:none}
+.password-strength{display:grid;gap:4px;margin-top:-8px}
+.strength-track{height:7px;overflow:hidden;border-radius:var(--rpill);background:var(--border)}
+.strength-track span{display:block;width:0;height:100%;border-radius:inherit;background:var(--muted);transition:width .18s,background-color .18s}
+.strength-label{font-size:13px;font-weight:600;color:var(--muted)}
+.password-strength[data-strength=weak] .strength-track span{background:var(--red)}
+.password-strength[data-strength=weak] .strength-label{color:var(--red)}
+.password-strength[data-strength=fair] .strength-track span{background:var(--orange)}
+.password-strength[data-strength=fair] .strength-label{color:var(--orange-dk)}
+.password-strength[data-strength=good] .strength-track span{background:#27834a}
+.password-strength[data-strength=good] .strength-label{color:#27834a}
+.password-strength[data-strength=strong] .strength-track span{background:#147a3b}
+.password-strength[data-strength=strong] .strength-label{color:#147a3b}
 
 /* ─── Item detail page ───────────────────────────────────────────── */
 .detail{display:grid;gap:18px}
