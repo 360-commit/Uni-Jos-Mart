@@ -1,0 +1,45 @@
+## Vercel Web Analytics Implementation
+
+Successfully installed and configured Vercel Web Analytics for the Uni-Jos Mart project.
+
+### Implementation Details
+
+**Project Type:** Static HTML/JavaScript site
+**Analytics Approach:** CDN-based script injection (no npm package required)
+
+### Changes Made
+
+1. **public/index.html**
+   - Added Vercel Analytics script tag before closing `</body>` tag
+   - Script: `<script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>`
+   - Position: Line 95, after existing scripts
+
+2. **public/terms.html**
+   - Added Vercel Analytics script tag before closing `</body>` tag
+   - Script: `<script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>`
+   - Position: Line 16, after main content
+
+### Implementation Notes
+
+- Used the CDN approach as recommended by Vercel documentation for static sites
+- No npm package installation required for vanilla HTML/JavaScript projects
+- The script is loaded with `defer` attribute for optimal performance
+- Analytics will automatically track page views and Web Vitals metrics
+- Both HTML pages now have analytics enabled for comprehensive tracking
+
+### Next Steps
+
+To activate analytics:
+1. Deploy the changes to Vercel
+2. Enable Web Analytics in the Vercel dashboard (Project Settings → Analytics)
+3. Analytics data will start appearing within minutes of deployment
+
+### Documentation Reference
+
+Implementation follows the official Vercel Web Analytics quickstart guide:
+https://vercel.com/docs/analytics/quickstart
+
+For static sites, Vercel provides a CDN-hosted script that automatically collects:
+- Page views
+- Web Vitals (LCP, FID, CLS, FCP, TTFB)
+- User navigation patterns
