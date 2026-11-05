@@ -553,6 +553,7 @@ function login() {
     <form id="lf">
       ${fld('email', 'Email', '', 'email')}
       ${fld('password', 'Password', '', 'password')}
+      <p><a href="#/forgot-password">Forgot your password?</a></p>
       <p class="mu">Log in to continue to your listing, chat, or other selected action.</p>
       <p class="err" id="er"></p>
       <button>Log in</button>
@@ -583,6 +584,81 @@ function login() {
       loadProfile(r.user.id);
     } catch (x) {
       const message = authError(x);
+      $('#er').textContent = message;
+      toast(message, 'error');
+    } finally {
+      setFormLoading(form, false);
+    }
+  };
+  wirePasswordToggle();
+}
+
+function forgotPassword() {
+  $('#app').innerHTML = `<div class="panel">
+    <h2>Reset your <span>password</span></h2>
+    <p>Enter the email address for your account. If it exists, Appwrite will send a password reset link.</p>
+    <form id="rf">
+      ${fld('email', 'Email', '', 'email')}
+      <p class="err" id="er" role="status"></p>
+      <button>Send reset link</button>
+    </form>
+    <p><a href="#/login">Back to log in</a></p>
+  </div>`;
+
+  $('#rf').onsubmit = async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const email = new FormData(form).get('email');
+    $('#er').textContent = '';
+    setFormLoading(form, true, 'Sending reset link…');
+    try {
+      await api('/password-recovery', { method: 'POST', body: { email } });
+      $('#er').textContent = 'If an account exists for that email, a password reset link has been sent.';
+    } catch (error) {
+      const message = friendly(error.message);
+      $('#er').textContent = message;
+      toast(message, 'error');
+    } finally {
+      setFormLoading(form, false);
+    }
+  };
+}
+
+function resetPassword(userId, secret) {
+  if (!userId || !secret) {
+    $('#app').innerHTML = `<div class="panel">
+      <h2>Reset link <span>invalid</span></h2>
+      <p>This password reset link is incomplete or invalid. Request a new one to continue.</p>
+      <p><a class="btn" href="#/forgot-password">Request another reset link</a></p>
+    </div>`;
+    return;
+  }
+
+  $('#app').innerHTML = `<div class="panel">
+    <h2>Choose a new <span>password</span></h2>
+    <form id="cf">
+      ${fld('password', 'New password (8+ characters)', '', 'password')}
+      ${fld('passwordAgain', 'Confirm new password', '', 'password')}
+      <p class="err" id="er"></p>
+      <button>Save new password</button>
+    </form>
+  </div>`;
+
+  $('#cf').onsubmit = async (e) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const body = Object.fromEntries(new FormData(form));
+    body.userId = userId;
+    body.secret = secret;
+    $('#er').textContent = '';
+    setFormLoading(form, true, 'Updating password…');
+    try {
+      await api('/password-recovery/confirm', { method: 'POST', body });
+      history.replaceState(null, '', `${location.pathname}#/login`);
+      toast('Password updated. Log in with your new password.', 'success');
+      login();
+    } catch (error) {
+      const message = friendly(error.message);
       $('#er').textContent = message;
       toast(message, 'error');
     } finally {
@@ -1072,13 +1148,20 @@ async function route() {
   }
 
   nav();
+  const searchParams = new URLSearchParams(location.search);
+  const hashQuery = location.hash.split('?')[1] || '';
+  const recoveryParams = new URLSearchParams(hashQuery);
+  const recoveryUserId = searchParams.get('userId') || recoveryParams.get('userId');
+  const recoverySecret = searchParams.get('secret') || recoveryParams.get('secret');
   const k = (location.hash || '').match(/^#\/chat\/(\w+)$/);
   const h = (location.hash || '#/').slice(1);
   const m = h.match(/^\/item\/(\w+)/);
   window.scrollTo(0, 0);
 
   try {
-    if (k) await chat(k[1]);
+    if (recoveryUserId || recoverySecret) resetPassword(recoveryUserId, recoverySecret);
+    else if (h === '/forgot-password') forgotPassword();
+    else if (k) await chat(k[1]);
     else if (h === '/inbox') await inbox();
     else if (h === '/saved') await saved();
     else if (h === '/admin') await admin();

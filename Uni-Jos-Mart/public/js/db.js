@@ -77,6 +77,7 @@ const fail = (error) => {
 		user_invalid_credentials: "Wrong email or password.",
 		user_password_mismatch: "Wrong email or password.",
 		user_password_too_short: "Password must be at least 8 characters.",
+		user_invalid_token: "This password reset link is invalid or has expired. Request a new one.",
 		"user_invalid_email": "Enter a valid email address.",
 		"user_blocked": "This account is blocked. Contact support.",
 		"user_unauthorized": "Please log in first.",
@@ -373,6 +374,32 @@ async function route(path, options = {}) {
 			token: "appwrite",
 			user: row ? payloadOf(row) : { id: user.$id, email: user.email },
 		};
+	}
+
+	if (pathname === "/password-recovery" && method === "POST") {
+		const email = String(body.email || "").trim().toLowerCase();
+		if (!email) throw new Error("Enter your email address.");
+		const url = `${location.origin}${location.pathname}`;
+		await run(() => account.createRecovery({ email, url }));
+		return {};
+	}
+
+	if (pathname === "/password-recovery/confirm" && method === "POST") {
+		if (!body.userId || !body.secret) {
+			throw new Error("This password reset link is incomplete. Request a new one.");
+		}
+		if (String(body.password || "").length < 8) {
+			throw new Error("Password must be at least 8 characters.");
+		}
+		if (body.password !== body.passwordAgain) {
+			throw new Error("The passwords do not match.");
+		}
+		await run(() => account.updateRecovery({
+			userId: body.userId,
+			secret: body.secret,
+			password: body.password,
+		}));
+		return {};
 	}
 
 	if (pathname === "/me") {
