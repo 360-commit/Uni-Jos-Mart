@@ -28,7 +28,7 @@ if (button) {
   window.addEventListener('appinstalled', () => {
     installPrompt = null;
     button.hidden = true;
-    hint.textContent = 'Uni-Jos Mart is installed.';
+    hint.textContent = '';
   });
 
   button.addEventListener('click', async () => {
