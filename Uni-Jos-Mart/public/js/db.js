@@ -208,6 +208,7 @@ const emptyProfile = (id, email = "") => ({
 	middleName: "",
 	surname: "",
 	phone: "",
+	gender: "",
 	matric: "",
 	faculty: "",
 	department: "",
@@ -464,7 +465,7 @@ async function route(path, options = {}) {
 		if (method === "PUT") {
 			const id = await uid();
 			const user = { ...await mine() };
-			for (const field of [...REQ, "middleName"]) {
+			for (const field of [...REQ, "middleName", "gender"]) {
 				if (body[field] !== undefined && field !== "email" && field !== "matric") {
 					user[field] = String(body[field]).trim();
 				}

@@ -20,6 +20,7 @@ const P = {
   search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5"/>',
   pin: '<path d="M12 22s7-7 7-12a7 7 0 00-14 0c0 5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/>',
   shield: '<path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/>',
+  verified: '<circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/>',
   box: '<path d="M3 7l9-4 9 4v10l-9 4-9-4zM3 7l9 4 9-4M12 11v10"/>',
   phone: '<path d="M5 4h4l2 5-2 1a11 11 0 005 5l1-2 5 2v4a2 2 0 01-2 2A17 17 0 013 6a2 2 0 012-2z"/>',
   heart: '<path d="M12 21s-8-5-8-11a4.5 4.5 0 018-3 4.5 4.5 0 018 3c0 6-8 11-8 11z"/>',
@@ -500,7 +501,11 @@ const sel = (n, l, a, v = '') => (
   `<div><label>${l}</label><select name="${n}" required><option value="">Select</option>${a.map((x) => `<option ${x === v ? 'selected' : ''}>${x}</option>`).join('')}</select></div>`
 );
 
-function profile(signup) {
+const optionalSel = (n, l, a, v = '') => (
+  `<div><label>${l}</label><select name="${n}"><option value="">Select</option>${a.map((x) => `<option ${x === v ? 'selected' : ''}>${x}</option>`).join('')}</select></div>`
+);
+
+async function profile(signup, editing = false) {
   const u = signup ? {} : me;
   if (!signup && !me) return (location.hash = '#/login');
   if (!signup && !profileReady) {
@@ -511,11 +516,69 @@ function profile(signup) {
     if (retry) retry.onclick = () => loadProfile(me.id);
     return;
   }
+
+  if (!signup && !editing) {
+    let verified = false;
+    let verificationError = '';
+    try {
+      verified = await backend.verified(u.id);
+    } catch (error) {
+      console.error('Could not load the profile verification status.', error);
+      verificationError = 'Verification status is unavailable right now.';
+    }
+
+    const value = (text) => esc(text || 'Not provided');
+    const fullName = [u.firstName, u.middleName, u.surname].filter(Boolean).join(' ') || 'Student';
+    const detail = (label, text) => `<div class="profile-detail"><span>${label}</span><b>${value(text)}</b></div>`;
+
+    $('#app').innerHTML = `<section class="panel profile-card">
+      <div class="profile-heading">
+        <div class="photo profile-avatar" ${bg(u.photo)}>${u.photo ? '' : ic('user')}</div>
+        <div class="profile-heading-info">
+          <h2>${esc(fullName)}</h2>
+          ${verified ? VB : `<span class="profile-status">${verificationError || 'Student profile'}</span>`}
+          <p>${value(u.campus || 'University of Jos')}</p>
+        </div>
+      </div>
+      <button type="button" class="profile-edit" id="editProfile">${ic('user')} Edit profile</button>
+    </section>
+    <section class="panel profile-details">
+      <h3>Personal information</h3>
+      <div class="profile-detail-grid">
+        ${detail('First name', u.firstName)}
+        ${detail('Middle name', u.middleName)}
+        ${detail('Surname', u.surname)}
+        ${detail('Gender', u.gender)}
+        ${detail('Email', u.email)}
+        ${detail('Phone number', u.phone)}
+      </div>
+    </section>
+    <section class="panel profile-details">
+      <h3>University details</h3>
+      <div class="profile-detail-grid">
+        ${detail('Faculty', u.faculty)}
+        ${detail('Department', u.department)}
+        ${detail('Matriculation number', u.matric)}
+        ${detail('School address', u.schoolAddress)}
+      </div>
+    </section>
+    <section class="panel profile-details">
+      <h3>Address</h3>
+      <div class="profile-detail-grid">
+        ${detail('Permanent home address', u.permAddress)}
+        ${detail('State of origin', u.state)}
+        ${detail('Local government', u.lga)}
+      </div>
+    </section>`;
+    $('#editProfile').onclick = () => profile(0, true);
+    return;
+  }
+
   let ph = u.photo || '';
 
   $('#app').innerHTML = `<div class="panel">
-    <h2>${signup ? 'Create <span>account' : 'My <span>profile'}</span></h2>
-    <p>${signup ? 'Everyone who signs up can buy and sell.' : 'Buyers see only your name, surname, faculty, department and school address.'}</p>
+    <h2>${signup ? 'Create <span>account' : 'Edit <span>profile'}</span></h2>
+    <p>${signup ? 'Everyone who signs up can buy and sell.' : 'Update your profile information. Buyers see only your name, surname, faculty, department and school address.'}</p>
     <form id="pf">
       <div class="seller">
         <div class="photo" id="ph" ${bg(ph)}>${ph ? '' : ic('cam')}</div>
@@ -526,13 +589,14 @@ function profile(signup) {
       <div class="row">${fld('phone', 'Phone number (WhatsApp)', u.phone, 'tel')}${fld('email', 'Email', u.email, 'email')}</div>
       ${signup ? passwordWithStrength('password', 'Password (8+ characters)') : ''}
       <div class="row">${sel('faculty', 'Faculty', FAC, u.faculty)}${fld('department', 'Department', u.department)}</div>
+      ${signup ? '' : optionalSel('gender', 'Gender (optional)', ['Female', 'Male', 'Prefer not to say'], u.gender)}
       ${fld('matric', 'Matriculation number', u.matric)}
       ${fld('schoolAddress', 'School address (hostel or lodge in Jos)', u.schoolAddress)}
       ${fld('permAddress', 'Permanent home address', u.permAddress)}
       <div class="row">${sel('state', 'State of origin', STATES, u.state)}${fld('lga', 'Local government of origin', u.lga)}</div>
       ${signup ? `<label class="chk"><input type="checkbox" name="terms" required><span>I agree to the <a href="terms.html#terms" target="_blank">Terms and Conditions</a> and <a href="terms.html#privacy" target="_blank">Privacy Policy</a>. I will not sell stolen items.</span></label>` : ''}
       <p class="err" id="er"></p>
-      <button>${signup ? 'Create account' : 'Save profile'}</button>
+      ${signup ? '<button>Create account</button>' : '<div class="profile-form-actions"><button type="button" class="alt" id="cancelEdit">Cancel</button><button type="submit">Save profile</button></div>'}
     </form>
   </div>
   ${signup ? '<p>Already registered? <a href="#/login">Log in</a></p>' : ''}`;
@@ -540,6 +604,7 @@ function profile(signup) {
   if (!signup) {
     $('#pf').email.readOnly = 1;
     $('#pf').matric.readOnly = 1;
+    $('#cancelEdit').onclick = () => profile(0);
   }
 
   $('#pi').onchange = async (e) => {
@@ -590,6 +655,7 @@ function profile(signup) {
     } finally {
       setFormLoading(form, false);
     }
+    if (!signup && profileReady && !$('#er').textContent) profile(0);
   };
   wirePasswordToggle();
   wirePasswordStrength();
@@ -1043,7 +1109,7 @@ async function chat(id) {
   };
 }
 
-const VB = '<span class="vb">' + ic('shield') + ' Verified student</span>';
+const VB = '<span class="vb">' + ic('verified') + ' Verified student</span>';
 let adm;
 let unread = 0;
 let inboxL = 0;
