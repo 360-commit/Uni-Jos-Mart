@@ -25,7 +25,6 @@ if (configReady) {
 const account = configReady ? new Account(client) : null;
 const tablesDB = configReady ? new TablesDB(client) : null;
 const tableId = (name) => appwriteConfig.tables[name];
-const ADMIN_ROLE = Role.label("admin");
 let profileCache = null;
 let lastMessageAt = 0;
 
@@ -105,7 +104,6 @@ const run = async (operation) => {
 	}
 };
 
-// Drop any lingering Appwrite session so createEmailPasswordSession can succeed.
 const clearSession = async () => {
 	try {
 		await account.deleteSession({ sessionId: "current" });
@@ -174,22 +172,22 @@ const listRows = (name, queries = []) => tablesDB.listRows({
 	queries,
 });
 
-const publicRead = (ownerId, adminWrite = false) => [
+// NOTE: Client-side sessions cannot grant label roles ("label:admin") that
+// the current user is not a member of. Appwrite rejects the whole permission
+// array in that case. Admin reads/writes must be routed through an Appwrite
+// Function with a server API key — see README "Important security and
+// migration notes". Admin features (dismissing reports, deleting others'
+// items, viewing private profiles) require that function to be built.
+const publicRead = (ownerId) => [
 	Permission.read(Role.any()),
 	Permission.update(Role.user(ownerId)),
 	Permission.delete(Role.user(ownerId)),
-	...(adminWrite
-		? [Permission.update(ADMIN_ROLE), Permission.delete(ADMIN_ROLE)]
-		: []),
 ];
 
 const privateUser = (ownerId) => [
 	Permission.read(Role.user(ownerId)),
 	Permission.update(Role.user(ownerId)),
 	Permission.delete(Role.user(ownerId)),
-	Permission.read(ADMIN_ROLE),
-	Permission.update(ADMIN_ROLE),
-	Permission.delete(ADMIN_ROLE),
 ];
 
 const pubOf = (user) => ({
@@ -330,7 +328,6 @@ async function route(path, options = {}) {
 		const email = body.email.trim().toLowerCase();
 		let created = false;
 
-		// Step 1 — create the account if it doesn't exist yet
 		try {
 			await account.create({
 				userId: ID.unique(),
@@ -343,11 +340,8 @@ async function route(path, options = {}) {
 			if (error?.type !== "user_already_exists" && Number(error?.code) !== 409) {
 				throw error;
 			}
-			// Account already exists — that's fine, we'll log in below.
 		}
 
-		// Step 2 — reuse an existing session for the same email,
-		// otherwise clear the stale session so a new one can be created.
 		let sessionReady = false;
 		try {
 			const current = await account.get();
@@ -357,10 +351,9 @@ async function route(path, options = {}) {
 				await account.deleteSession({ sessionId: "current" });
 			}
 		} catch {
-			// No active session — fine.
+			// no active session
 		}
 
-		// Step 3 — create the session only if we don't already have one.
 		if (!sessionReady) {
 			try {
 				await account.createEmailPasswordSession({ email, password: body.password });
@@ -407,7 +400,6 @@ async function route(path, options = {}) {
 		const email = String(body.email || "").trim().toLowerCase();
 		const password = body.password || "";
 
-		// Reuse a session for the same email, otherwise clear stale one first.
 		let sessionReady = false;
 		try {
 			const current = await account.get();
@@ -417,7 +409,7 @@ async function route(path, options = {}) {
 				await account.deleteSession({ sessionId: "current" });
 			}
 		} catch {
-			// No active session — fine.
+			// no active session
 		}
 
 		if (!sessionReady) {
@@ -515,7 +507,7 @@ async function route(path, options = {}) {
 			"items",
 			ID.unique(),
 			rowData(item, { sellerId: id, category: item.category, created: item.created, kw: item.kw }),
-			publicRead(id, true),
+			publicRead(id),
 		);
 		return { id: row.$id, ...item };
 	}
@@ -752,13 +744,15 @@ window.backend = {
 	},
 
 	async setVerified(sellerId, verified) {
+		// Requires the signed-in user to have the "admin" label applied in
+		// Appwrite Auth. If the label is missing, Appwrite rejects the row.
 		await uid();
 		const existing = await getRowOrNull("verified", sellerId);
 		if (verified && !existing) {
 			await createRow("verified", sellerId, rowData({ t: Date.now() }, { ownerId: sellerId }), [
 				Permission.read(Role.any()),
-				Permission.update(ADMIN_ROLE),
-				Permission.delete(ADMIN_ROLE),
+				Permission.update(Role.label("admin")),
+				Permission.delete(Role.label("admin")),
 			]);
 		} else if (!verified && existing) {
 			await deleteRow("verified", sellerId);
@@ -766,6 +760,9 @@ window.backend = {
 	},
 
 	async priv(sellerId) {
+		// Admin-only in practice. Without a server function the row will
+		// be readable only if the admin owns it, so this returns null for
+		// other users' private data until a server-side function exists.
 		const row = await getRowOrNull("users", sellerId);
 		return row ? payloadOf(row) : null;
 	},
@@ -860,6 +857,8 @@ window.backend = {
 		if (chat.buyer !== userId || !chat.done || stars < 1 || stars > 5) {
 			throw new Error("Only the buyer can review a completed deal.");
 		}
+		// Admin delete permission omitted — a client session cannot grant it.
+		// Review moderation must go through a server-side Appwrite Function.
 		await createRow("reviews", id, rowData({
 			sellerId: chat.sellerId,
 			buyerId: chat.buyer,
@@ -870,7 +869,6 @@ window.backend = {
 		}, { sellerId: chat.sellerId, buyerId: chat.buyer, t: Date.now() }), [
 			Permission.read(Role.any()),
 			Permission.update(Role.user(userId)),
-			Permission.delete(ADMIN_ROLE),
 		]);
 	},
 
@@ -890,6 +888,9 @@ window.backend = {
 	async report(type, reference, reason) {
 		const userId = await uid();
 		const id = await stableId("report", `${userId}:${reference}`);
+		// Admin read/delete permissions omitted for the same reason as above.
+		// The reporter can always see their own report; admins need a server
+		// function to triage them.
 		await createRow("reports", id, rowData({
 			by: userId,
 			type,
@@ -898,8 +899,6 @@ window.backend = {
 			t: Date.now(),
 		}, { by: userId, type, ref: reference, t: Date.now() }), [
 			Permission.read(Role.user(userId)),
-			Permission.read(ADMIN_ROLE),
-			Permission.delete(ADMIN_ROLE),
 		]);
 	},
 };
