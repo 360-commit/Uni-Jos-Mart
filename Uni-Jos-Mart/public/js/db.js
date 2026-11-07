@@ -81,6 +81,7 @@ const fail = (error) => {
 		"user_invalid_email": "Enter a valid email address.",
 		"user_blocked": "This account is blocked. Contact support.",
 		"user_unauthorized": "Please log in first.",
+		"user_session_already_exists": "You are already signed in. Please refresh the page.",
 		"document_already_exists": "This matriculation number is already registered.",
 		"row_already_exists": "This matriculation number is already registered.",
 		"general_rate_limit_exceeded": "Too many attempts. Wait a few minutes, then try again.",
@@ -101,6 +102,15 @@ const run = async (operation) => {
 		return await operation();
 	} catch (error) {
 		throw fail(error);
+	}
+};
+
+// Drop any lingering Appwrite session so createEmailPasswordSession can succeed.
+const clearSession = async () => {
+	try {
+		await account.deleteSession({ sessionId: "current" });
+	} catch {
+		// No active session — safe to ignore.
 	}
 };
 
@@ -319,9 +329,10 @@ async function route(path, options = {}) {
 
 		const email = body.email.trim().toLowerCase();
 		let created = false;
-		let user;
+
+		// Step 1 — create the account if it doesn't exist yet
 		try {
-			user = await account.create({
+			await account.create({
 				userId: ID.unique(),
 				email,
 				password: body.password,
@@ -329,12 +340,43 @@ async function route(path, options = {}) {
 			});
 			created = true;
 		} catch (error) {
-			if (error?.type !== "user_already_exists" && Number(error?.code) !== 409) throw error;
+			if (error?.type !== "user_already_exists" && Number(error?.code) !== 409) {
+				throw error;
+			}
+			// Account already exists — that's fine, we'll log in below.
 		}
 
-		await account.createEmailPasswordSession({ email, password: body.password });
-		const userId = user?.$id || (await account.get()).$id;
+		// Step 2 — reuse an existing session for the same email,
+		// otherwise clear the stale session so a new one can be created.
+		let sessionReady = false;
+		try {
+			const current = await account.get();
+			if ((current.email || "").toLowerCase() === email) {
+				sessionReady = true;
+			} else {
+				await account.deleteSession({ sessionId: "current" });
+			}
+		} catch {
+			// No active session — fine.
+		}
+
+		// Step 3 — create the session only if we don't already have one.
+		if (!sessionReady) {
+			try {
+				await account.createEmailPasswordSession({ email, password: body.password });
+			} catch (error) {
+				if (error?.type === "user_session_already_exists") {
+					await account.deleteSession({ sessionId: "current" });
+					await account.createEmailPasswordSession({ email, password: body.password });
+				} else {
+					throw error;
+				}
+			}
+		}
+
+		const userId = (await account.get()).$id;
 		const savedProfile = await getRowOrNull("users", userId);
+
 		if (savedProfile) {
 			profileCache = payloadOf(savedProfile);
 			await saveProfile(profileCache);
@@ -363,10 +405,34 @@ async function route(path, options = {}) {
 
 	if (pathname === "/login") {
 		const email = String(body.email || "").trim().toLowerCase();
-		await run(() => account.createEmailPasswordSession({
-			email,
-			password: body.password || "",
-		}));
+		const password = body.password || "";
+
+		// Reuse a session for the same email, otherwise clear stale one first.
+		let sessionReady = false;
+		try {
+			const current = await account.get();
+			if ((current.email || "").toLowerCase() === email) {
+				sessionReady = true;
+			} else {
+				await account.deleteSession({ sessionId: "current" });
+			}
+		} catch {
+			// No active session — fine.
+		}
+
+		if (!sessionReady) {
+			try {
+				await account.createEmailPasswordSession({ email, password });
+			} catch (error) {
+				if (error?.type === "user_session_already_exists") {
+					await account.deleteSession({ sessionId: "current" });
+					await account.createEmailPasswordSession({ email, password });
+				} else {
+					throw error;
+				}
+			}
+		}
+
 		profileCache = null;
 		const user = await account.get();
 		const row = await getRowOrNull("users", user.$id);
@@ -489,7 +555,7 @@ window.api = async (path, options = {}) => run(() => route(path, options));
 window.backend = {
 	async out() {
 		profileCache = null;
-		return run(() => account.deleteSession({ sessionId: "current" }));
+		return clearSession();
 	},
 
 	async chatOpen(itemId, buyer) {
