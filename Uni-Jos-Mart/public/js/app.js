@@ -378,7 +378,7 @@ async function item(id) {
             ? `<div class="acts">
                 <a class="btn" href="https://wa.me/${wa(s.phone)}">${ic('phone')} WhatsApp seller</a>
                 <a class="btn alt" href="tel:${esc(s.phone)}">Call</a>
-                <a class="btn alt" id="chat-seller" href="#/chat/${i.id}_${me.id}">${ic('chat')} Chat with seller</a>
+                <a class="btn alt" id="chat-seller" href="#/new-chat/${encodeURIComponent(i.id)}">${ic('chat')} Chat with seller</a>
               </div>`
             : `<div class="acts">
                 <a class="btn" id="signup-contact" href="#/signup">${ic('user')} Sign up to contact seller</a>
@@ -386,7 +386,7 @@ async function item(id) {
               </div>`
           : i.status === 'available'
             ? me
-              ? `<div class="acts"><a class="btn alt" id="chat-seller" href="#/chat/${i.id}_${me.id}">${ic('chat')} Chat with seller</a></div>`
+              ? `<div class="acts"><a class="btn alt" id="chat-seller" href="#/new-chat/${encodeURIComponent(i.id)}">${ic('chat')} Chat with seller</a></div>`
               : `<div class="acts">
                   <a class="btn" id="signup-contact" href="#/signup">${ic('user')} Sign up to chat with seller</a>
                   <a class="btn alt" id="login-contact" href="#/login">Already have an account? Log in</a>
@@ -417,7 +417,7 @@ async function item(id) {
     const contactLink = $(selector);
     if (contactLink) {
       contactLink.onclick = () => {
-        afterAuth = (user) => `#/chat/${i.id}_${user.id}`;
+        afterAuth = () => `#/new-chat/${encodeURIComponent(i.id)}`;
       };
     }
   });
@@ -941,18 +941,18 @@ async function inbox() {
   };
 }
 
-async function chat(id) {
+async function chat(id, startForBuyer = false) {
   if (unsub) {
     unsub();
     unsub = 0;
   }
   if (!me) {
-    afterAuth = () => `#/chat/${id}`;
+    afterAuth = () => `${startForBuyer ? '#/new-chat/' : '#/chat/'}${encodeURIComponent(id)}`;
     location.hash = '#/login';
     return;
   }
 
-  const c = await backend.chatOpen(id);
+  const c = await backend.chatOpen(id, startForBuyer ? me.id : undefined);
   id = c.id;
   $('#app').innerHTML = `<div class="panel">
     <h2>${esc(c.title)}</h2>
@@ -1268,7 +1268,8 @@ async function route() {
   const recoveryParams = new URLSearchParams(hashQuery);
   const recoveryUserId = searchParams.get('userId') || recoveryParams.get('userId');
   const recoverySecret = searchParams.get('secret') || recoveryParams.get('secret');
-  const k = (location.hash || '').match(/^#\/chat\/(\w+)$/);
+  const k = (location.hash || '').match(/^#\/chat\/([A-Za-z0-9._-]+)$/);
+  const newChat = (location.hash || '').match(/^#\/new-chat\/([A-Za-z0-9._-]+)$/);
   const h = (location.hash || '#/').slice(1);
   const m = h.match(/^\/item\/(\w+)/);
   window.scrollTo(0, 0);
@@ -1276,7 +1277,8 @@ async function route() {
   try {
     if (recoveryUserId || recoverySecret) resetPassword(recoveryUserId, recoverySecret);
     else if (h === '/forgot-password') forgotPassword();
-    else if (k) await chat(k[1]);
+    else if (newChat) await chat(decodeURIComponent(newChat[1]), true);
+    else if (k) await chat(decodeURIComponent(k[1]));
     else if (h === '/inbox') await inbox();
     else if (h === '/saved') await saved();
     else if (h === '/admin') await admin();
